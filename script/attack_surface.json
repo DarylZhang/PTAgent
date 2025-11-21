@@ -1,0 +1,579 @@
+{
+  "base_url": "http://localhost:3000",
+  "pages": [
+    {
+      "url": "http://localhost:3000",
+      "discovered_links": [
+        "http://localhost:3000#/login",
+        "http://localhost:3000#/contact",
+        "http://localhost:3000#/about",
+        "http://localhost:3000#/photo-wall",
+        "http://localhost:3000/redirect?to=https://github.com/juice-shop/juice-shop"
+      ],
+      "discovered_hash_routes": [
+        "#/about",
+        "#/contact",
+        "#/login",
+        "#/photo-wall"
+      ]
+    },
+    {
+      "url": "http://localhost:3000#/login",
+      "discovered_links": [
+        "http://localhost:3000#/login",
+        "http://localhost:3000#/contact",
+        "http://localhost:3000#/about",
+        "http://localhost:3000#/photo-wall",
+        "http://localhost:3000/redirect?to=https://github.com/juice-shop/juice-shop",
+        "http://localhost:3000#/forgot-password",
+        "http://localhost:3000#/register"
+      ],
+      "discovered_hash_routes": [
+        "#/about",
+        "#/contact",
+        "#/forgot-password",
+        "#/login",
+        "#/photo-wall",
+        "#/register"
+      ]
+    },
+    {
+      "url": "http://localhost:3000#/contact",
+      "discovered_links": [
+        "http://localhost:3000#/login",
+        "http://localhost:3000#/contact",
+        "http://localhost:3000#/about",
+        "http://localhost:3000#/photo-wall",
+        "http://localhost:3000/redirect?to=https://github.com/juice-shop/juice-shop"
+      ],
+      "discovered_hash_routes": [
+        "#/about",
+        "#/contact",
+        "#/login",
+        "#/photo-wall"
+      ]
+    },
+    {
+      "url": "http://localhost:3000#/about",
+      "discovered_links": [
+        "http://localhost:3000#/login",
+        "http://localhost:3000#/contact",
+        "http://localhost:3000#/about",
+        "http://localhost:3000#/photo-wall",
+        "http://localhost:3000/redirect?to=https://github.com/juice-shop/juice-shop",
+        "http://localhost:3000/ftp/legal.md"
+      ],
+      "discovered_hash_routes": [
+        "#/about",
+        "#/contact",
+        "#/login",
+        "#/photo-wall"
+      ]
+    },
+    {
+      "url": "http://localhost:3000#/photo-wall",
+      "discovered_links": [
+        "http://localhost:3000#/login",
+        "http://localhost:3000#/contact",
+        "http://localhost:3000#/about",
+        "http://localhost:3000#/photo-wall",
+        "http://localhost:3000/redirect?to=https://github.com/juice-shop/juice-shop"
+      ],
+      "discovered_hash_routes": [
+        "#/about",
+        "#/contact",
+        "#/login",
+        "#/photo-wall"
+      ]
+    },
+    {
+      "url": "http://localhost:3000/redirect?to=https://github.com/juice-shop/juice-shop",
+      "discovered_links": [],
+      "discovered_hash_routes": []
+    },
+    {
+      "url": "http://localhost:3000#/forgot-password",
+      "discovered_links": [
+        "http://localhost:3000#/login",
+        "http://localhost:3000#/contact",
+        "http://localhost:3000#/about",
+        "http://localhost:3000#/photo-wall",
+        "http://localhost:3000/redirect?to=https://github.com/juice-shop/juice-shop"
+      ],
+      "discovered_hash_routes": [
+        "#/about",
+        "#/contact",
+        "#/login",
+        "#/photo-wall"
+      ]
+    },
+    {
+      "url": "http://localhost:3000#/register",
+      "discovered_links": [
+        "http://localhost:3000#/login",
+        "http://localhost:3000#/contact",
+        "http://localhost:3000#/about",
+        "http://localhost:3000#/photo-wall",
+        "http://localhost:3000/redirect?to=https://github.com/juice-shop/juice-shop"
+      ],
+      "discovered_hash_routes": [
+        "#/about",
+        "#/contact",
+        "#/login",
+        "#/photo-wall"
+      ]
+    }
+  ],
+  "inputs": [
+    {
+      "page_url": "http://localhost:3000",
+      "tag": "input",
+      "name": null,
+      "input_type": "text",
+      "id": "mat-input-1",
+      "placeholder": null,
+      "css_selector": "input#mat-input-1"
+    },
+    {
+      "page_url": "http://localhost:3000#/login",
+      "tag": "input",
+      "name": null,
+      "input_type": "text",
+      "id": "mat-input-1",
+      "placeholder": null,
+      "css_selector": "input#mat-input-1"
+    },
+    {
+      "page_url": "http://localhost:3000#/login",
+      "tag": "input",
+      "name": "email",
+      "input_type": null,
+      "id": "email",
+      "placeholder": null,
+      "css_selector": "input#email"
+    },
+    {
+      "page_url": "http://localhost:3000#/login",
+      "tag": "input",
+      "name": "password",
+      "input_type": "password",
+      "id": "password",
+      "placeholder": null,
+      "css_selector": "input#password"
+    },
+    {
+      "page_url": "http://localhost:3000#/login",
+      "tag": "input",
+      "name": null,
+      "input_type": "checkbox",
+      "id": "rememberMe-input",
+      "placeholder": null,
+      "css_selector": "input#rememberMe-input"
+    },
+    {
+      "page_url": "http://localhost:3000#/contact",
+      "tag": "input",
+      "name": null,
+      "input_type": "text",
+      "id": "mat-input-1",
+      "placeholder": null,
+      "css_selector": "input#mat-input-1"
+    },
+    {
+      "page_url": "http://localhost:3000#/contact",
+      "tag": "input",
+      "name": null,
+      "input_type": "text",
+      "id": "userId",
+      "placeholder": null,
+      "css_selector": "input#userId"
+    },
+    {
+      "page_url": "http://localhost:3000#/contact",
+      "tag": "input",
+      "name": null,
+      "input_type": "text",
+      "id": "mat-input-4",
+      "placeholder": null,
+      "css_selector": "input#mat-input-4"
+    },
+    {
+      "page_url": "http://localhost:3000#/contact",
+      "tag": "textarea",
+      "name": null,
+      "input_type": null,
+      "id": "comment",
+      "placeholder": "What did you like or dislike?",
+      "css_selector": "textarea#comment"
+    },
+    {
+      "page_url": "http://localhost:3000#/contact",
+      "tag": "input",
+      "name": null,
+      "input_type": "range",
+      "id": null,
+      "placeholder": null,
+      "css_selector": "input:nth-of-type(5)"
+    },
+    {
+      "page_url": "http://localhost:3000#/contact",
+      "tag": "input",
+      "name": null,
+      "input_type": "text",
+      "id": "captchaControl",
+      "placeholder": "Please enter the result of the CAPTCHA.",
+      "css_selector": "input#captchaControl"
+    },
+    {
+      "page_url": "http://localhost:3000#/about",
+      "tag": "input",
+      "name": null,
+      "input_type": "text",
+      "id": "mat-input-1",
+      "placeholder": null,
+      "css_selector": "input#mat-input-1"
+    },
+    {
+      "page_url": "http://localhost:3000#/photo-wall",
+      "tag": "input",
+      "name": null,
+      "input_type": "text",
+      "id": "mat-input-1",
+      "placeholder": null,
+      "css_selector": "input#mat-input-1"
+    },
+    {
+      "page_url": "http://localhost:3000#/forgot-password",
+      "tag": "input",
+      "name": null,
+      "input_type": "text",
+      "id": "mat-input-1",
+      "placeholder": null,
+      "css_selector": "input#mat-input-1"
+    },
+    {
+      "page_url": "http://localhost:3000#/forgot-password",
+      "tag": "input",
+      "name": null,
+      "input_type": "email",
+      "id": "email",
+      "placeholder": "Enter your email",
+      "css_selector": "input#email"
+    },
+    {
+      "page_url": "http://localhost:3000#/forgot-password",
+      "tag": "input",
+      "name": null,
+      "input_type": "password",
+      "id": "securityAnswer",
+      "placeholder": null,
+      "css_selector": "input#securityAnswer"
+    },
+    {
+      "page_url": "http://localhost:3000#/forgot-password",
+      "tag": "input",
+      "name": null,
+      "input_type": "password",
+      "id": "newPassword",
+      "placeholder": null,
+      "css_selector": "input#newPassword"
+    },
+    {
+      "page_url": "http://localhost:3000#/forgot-password",
+      "tag": "input",
+      "name": null,
+      "input_type": "password",
+      "id": "newPasswordRepeat",
+      "placeholder": null,
+      "css_selector": "input#newPasswordRepeat"
+    },
+    {
+      "page_url": "http://localhost:3000#/register",
+      "tag": "input",
+      "name": null,
+      "input_type": "text",
+      "id": "mat-input-1",
+      "placeholder": null,
+      "css_selector": "input#mat-input-1"
+    },
+    {
+      "page_url": "http://localhost:3000#/register",
+      "tag": "input",
+      "name": null,
+      "input_type": "text",
+      "id": "emailControl",
+      "placeholder": null,
+      "css_selector": "input#emailControl"
+    },
+    {
+      "page_url": "http://localhost:3000#/register",
+      "tag": "input",
+      "name": null,
+      "input_type": "password",
+      "id": "passwordControl",
+      "placeholder": null,
+      "css_selector": "input#passwordControl"
+    },
+    {
+      "page_url": "http://localhost:3000#/register",
+      "tag": "input",
+      "name": null,
+      "input_type": "password",
+      "id": "repeatPasswordControl",
+      "placeholder": null,
+      "css_selector": "input#repeatPasswordControl"
+    },
+    {
+      "page_url": "http://localhost:3000#/register",
+      "tag": "input",
+      "name": null,
+      "input_type": "text",
+      "id": "securityAnswerControl",
+      "placeholder": "Answer to your security question",
+      "css_selector": "input#securityAnswerControl"
+    }
+  ],
+  "forms": [],
+  "api_calls": [
+    {
+      "url": "http://localhost:3000/assets/i18n/en.json",
+      "method": "GET",
+      "resource_type": "xhr",
+      "request_post_data": null
+    },
+    {
+      "url": "http://localhost:3000/socket.io/?EIO=4&transport=polling&t=Pg4yrcZ",
+      "method": "GET",
+      "resource_type": "xhr",
+      "request_post_data": null
+    },
+    {
+      "url": "http://localhost:3000/rest/admin/application-version",
+      "method": "GET",
+      "resource_type": "xhr",
+      "request_post_data": null
+    },
+    {
+      "url": "http://localhost:3000/rest/admin/application-configuration",
+      "method": "GET",
+      "resource_type": "xhr",
+      "request_post_data": null
+    },
+    {
+      "url": "http://localhost:3000/api/Challenges/?name=Score%20Board",
+      "method": "GET",
+      "resource_type": "xhr",
+      "request_post_data": null
+    },
+    {
+      "url": "http://localhost:3000/rest/languages",
+      "method": "GET",
+      "resource_type": "xhr",
+      "request_post_data": null
+    },
+    {
+      "url": "http://localhost:3000/rest/admin/application-version",
+      "method": "GET",
+      "resource_type": "xhr",
+      "request_post_data": null
+    },
+    {
+      "url": "http://localhost:3000/rest/admin/application-configuration",
+      "method": "GET",
+      "resource_type": "xhr",
+      "request_post_data": null
+    },
+    {
+      "url": "http://localhost:3000/api/Challenges/?name=Score%20Board",
+      "method": "GET",
+      "resource_type": "xhr",
+      "request_post_data": null
+    },
+    {
+      "url": "http://localhost:3000/rest/admin/application-configuration",
+      "method": "GET",
+      "resource_type": "xhr",
+      "request_post_data": null
+    },
+    {
+      "url": "http://localhost:3000/rest/admin/application-configuration",
+      "method": "GET",
+      "resource_type": "xhr",
+      "request_post_data": null
+    },
+    {
+      "url": "http://localhost:3000/api/Quantitys/",
+      "method": "GET",
+      "resource_type": "xhr",
+      "request_post_data": null
+    },
+    {
+      "url": "http://localhost:3000/rest/products/search?q=",
+      "method": "GET",
+      "resource_type": "xhr",
+      "request_post_data": null
+    },
+    {
+      "url": "http://localhost:3000/socket.io/?EIO=4&transport=polling&t=Pg4yrdB&sid=AF5CcXE9K0KpbdVGAAAM",
+      "method": "POST",
+      "resource_type": "xhr",
+      "request_post_data": "40"
+    },
+    {
+      "url": "http://localhost:3000/socket.io/?EIO=4&transport=polling&t=Pg4yrdC&sid=AF5CcXE9K0KpbdVGAAAM",
+      "method": "GET",
+      "resource_type": "xhr",
+      "request_post_data": null
+    },
+    {
+      "url": "http://localhost:3000/socket.io/?EIO=4&transport=polling&t=Pg4yrdP&sid=AF5CcXE9K0KpbdVGAAAM",
+      "method": "GET",
+      "resource_type": "xhr",
+      "request_post_data": null
+    },
+    {
+      "url": "http://localhost:3000/rest/admin/application-configuration",
+      "method": "GET",
+      "resource_type": "xhr",
+      "request_post_data": null
+    },
+    {
+      "url": "http://localhost:3000/rest/admin/application-configuration",
+      "method": "GET",
+      "resource_type": "xhr",
+      "request_post_data": null
+    },
+    {
+      "url": "http://localhost:3000/rest/user/whoami",
+      "method": "GET",
+      "resource_type": "xhr",
+      "request_post_data": null
+    },
+    {
+      "url": "http://localhost:3000/rest/captcha/",
+      "method": "GET",
+      "resource_type": "xhr",
+      "request_post_data": null
+    },
+    {
+      "url": "http://localhost:3000/api/Feedbacks/",
+      "method": "GET",
+      "resource_type": "xhr",
+      "request_post_data": null
+    },
+    {
+      "url": "http://localhost:3000/rest/admin/application-configuration",
+      "method": "GET",
+      "resource_type": "xhr",
+      "request_post_data": null
+    },
+    {
+      "url": "http://localhost:3000/rest/memories/",
+      "method": "GET",
+      "resource_type": "xhr",
+      "request_post_data": null
+    },
+    {
+      "url": "http://localhost:3000/rest/admin/application-configuration",
+      "method": "GET",
+      "resource_type": "xhr",
+      "request_post_data": null
+    },
+    {
+      "url": "http://localhost:3000/assets/i18n/en.json",
+      "method": "GET",
+      "resource_type": "xhr",
+      "request_post_data": null
+    },
+    {
+      "url": "http://localhost:3000/socket.io/?EIO=4&transport=polling&t=Pg4ysXx",
+      "method": "GET",
+      "resource_type": "xhr",
+      "request_post_data": null
+    },
+    {
+      "url": "http://localhost:3000/rest/admin/application-version",
+      "method": "GET",
+      "resource_type": "xhr",
+      "request_post_data": null
+    },
+    {
+      "url": "http://localhost:3000/rest/admin/application-configuration",
+      "method": "GET",
+      "resource_type": "xhr",
+      "request_post_data": null
+    },
+    {
+      "url": "http://localhost:3000/api/Challenges/?name=Score%20Board",
+      "method": "GET",
+      "resource_type": "xhr",
+      "request_post_data": null
+    },
+    {
+      "url": "http://localhost:3000/rest/languages",
+      "method": "GET",
+      "resource_type": "xhr",
+      "request_post_data": null
+    },
+    {
+      "url": "http://localhost:3000/rest/admin/application-version",
+      "method": "GET",
+      "resource_type": "xhr",
+      "request_post_data": null
+    },
+    {
+      "url": "http://localhost:3000/rest/admin/application-configuration",
+      "method": "GET",
+      "resource_type": "xhr",
+      "request_post_data": null
+    },
+    {
+      "url": "http://localhost:3000/api/Challenges/?name=Score%20Board",
+      "method": "GET",
+      "resource_type": "xhr",
+      "request_post_data": null
+    },
+    {
+      "url": "http://localhost:3000/rest/admin/application-configuration",
+      "method": "GET",
+      "resource_type": "xhr",
+      "request_post_data": null
+    },
+    {
+      "url": "http://localhost:3000/rest/admin/application-configuration",
+      "method": "GET",
+      "resource_type": "xhr",
+      "request_post_data": null
+    },
+    {
+      "url": "http://localhost:3000/socket.io/?EIO=4&transport=polling&t=Pg4ysYg&sid=6I_t4Wg46lYWIFgHAAAO",
+      "method": "POST",
+      "resource_type": "xhr",
+      "request_post_data": "40"
+    },
+    {
+      "url": "http://localhost:3000/socket.io/?EIO=4&transport=polling&t=Pg4ysYh&sid=6I_t4Wg46lYWIFgHAAAO",
+      "method": "GET",
+      "resource_type": "xhr",
+      "request_post_data": null
+    },
+    {
+      "url": "http://localhost:3000/rest/admin/application-configuration",
+      "method": "GET",
+      "resource_type": "xhr",
+      "request_post_data": null
+    },
+    {
+      "url": "http://localhost:3000/socket.io/?EIO=4&transport=polling&t=Pg4ysYt&sid=6I_t4Wg46lYWIFgHAAAO",
+      "method": "GET",
+      "resource_type": "xhr",
+      "request_post_data": null
+    },
+    {
+      "url": "http://localhost:3000/api/SecurityQuestions/",
+      "method": "GET",
+      "resource_type": "xhr",
+      "request_post_data": null
+    }
+  ]
+}

