@@ -45,7 +45,14 @@ class ApiCall:
     # 触发该请求的页面（有时重定向后最终 URL 会不同）
     page_url: Optional[str] = None
 
-    # 以后可以扩展：响应状态码 / 响应体摘要 / headers / cookies 等
+    request_headers: Dict[str, str] = field(default_factory=dict)
+    request_cookies: List[Dict[str, Any]] = field(default_factory=list)
+    
+    response_status: Optional[int] = None
+    response_headers: Dict[str, str] = field(default_factory=dict)
+    response_body: Optional[str] = None  # 文本形式的响应体（如有）
+
+    # 以后可以扩展：响应体摘要 / 更多元信息
     meta: Dict[str, Any] = field(default_factory=dict)
 
 

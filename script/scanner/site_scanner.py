@@ -55,6 +55,9 @@ class SiteScanner:
         self._next_clickable_id = 1
         self._next_api_id = 1
         self._next_submission_id = 1  # 预留，将来用
+        
+        # 当前页面加载期间捕获的 API
+        self._captured_apis: List[ApiCall] = []
 
     # ==============================
     # 对外入口：扫描整个站点
@@ -70,7 +73,7 @@ class SiteScanner:
             def on_request_finished(req: Request) -> None:
                 try:
                     rt = req.resource_type
-                    if rt not in ("xhr", "fetch"):
+                    if rt not in ("xhr", "fetch", "websocket"):
                         return
 
                     frame_url = req.frame.url
@@ -81,6 +84,25 @@ class SiteScanner:
                     except Exception:
                         body = None
 
+                    # 尝试获取响应信息
+                    resp = req.response()
+                    resp_status = None
+                    resp_headers = {}
+                    resp_body = None
+                    
+                    if resp:
+                        resp_status = resp.status
+                        resp_headers = resp.all_headers()
+                        try:
+                            # 限制响应体大小，避免过大
+                            body_bytes = resp.body()
+                            if len(body_bytes) > 10000:
+                                resp_body = body_bytes[:10000].decode("utf-8", errors="replace") + "\n<!-- truncated -->"
+                            else:
+                                resp_body = body_bytes.decode("utf-8", errors="replace")
+                        except Exception:
+                            pass
+
                     api = ApiCall(
                         id=self._next_api_id,
                         url=req.url,
@@ -88,8 +110,17 @@ class SiteScanner:
                         resource_type=rt,
                         request_body=body,
                         page_url=frame_url,
+                        request_headers=req.all_headers(),
+                        # request.headers_array() 包含 cookies，或者单独解析
+                        # 这里简单处理，暂不单独解析 cookies 结构，后续可增强
+                        response_status=resp_status,
+                        response_headers=resp_headers,
+                        response_body=resp_body,
                     )
                     self._next_api_id += 1
+                    
+                    # 存入当前页面的捕获列表
+                    self._captured_apis.append(api)
 
                     bucket = self._api_calls_buffer.setdefault(frame_url, [])
                     bucket.append(api)
@@ -123,7 +154,11 @@ class SiteScanner:
         self._visited.add(url)
 
         try:
+            # 清空上一页的捕获记录
+            self._captured_apis.clear()
             page.goto(url, wait_until="networkidle", timeout=15000)
+            # 等待 2 秒，确保 SPA 的后续请求（如 socket 连接、延迟加载）能被捕获
+            page.wait_for_timeout(2000)
         except Exception as e:
             print(f"[WARN] Failed to load {url}: {e}")
             return
@@ -150,14 +185,52 @@ class SiteScanner:
         clickables = self._extract_clickables(page, current_url)
 
         # 4) 收集在这个页面生命周期中发生的 API 调用
-        #    简化版：目前直接从全局 buffer 里拿全部（以后可以按 page_url 精细区分）。
-        api_calls: List[ApiCall] = []
-        global_apis = self._api_calls_buffer.get("_global", [])
-        # 注意：这里没有做页面粒度划分，只是让 PageAsset 至少有 API 信息可用。
-        api_calls.extend(global_apis)
+        #    使用 _captured_apis (在 goto 前已清空)
+        api_calls: List[ApiCall] = self._captured_apis[:]
 
-        # 5) 目前 submissions 先留空，以后通过点击行为 + 网络差分来填
-        submissions = []
+        # 5) 构建 SubmissionUnit
+        #    逻辑：遍历本页触发的所有 API Call，尝试寻找“相关”的 InputField
+        submissions: List[SubmissionUnit] = []
+        
+        # 简单的启发式映射：
+        # 如果 API 请求体/参数里出现了 input 的 name/id，就认为它们相关
+        from .page_asset import SubmissionUnit
+
+        for api in api_calls:
+            related_inputs = []
+            # 提取 API 参数特征（简单处理：全转字符串搜）
+            # 以后可以解析 JSON / Form Data 做精确匹配
+            api_payload_str = ""
+            if api.request_body:
+                api_payload_str += str(api.request_body)
+            if api.url:
+                api_payload_str += api.url  # 包含 query params
+
+            for inp in inputs:
+                # 如果 input 有 name，且 name 出现在 API 参数里
+                if inp.name and inp.name in api_payload_str:
+                    related_inputs.append(inp.internal_id)
+                # 或者如果 input 有 id，且 id 出现在 API 参数里
+                elif inp.dom_id and inp.dom_id in api_payload_str:
+                    related_inputs.append(inp.internal_id)
+            
+            # 如果没找到明确关联，但 API 是 POST/PUT，且页面有输入框，
+            # 可能是“整个表单”提交，把所有输入框都关联上去（宁滥勿缺，交给 LLM 甄别）
+            if not related_inputs and api.method in ("POST", "PUT", "PATCH") and inputs:
+                related_inputs = [i.internal_id for i in inputs]
+
+            # 创建 SubmissionUnit
+            # 这里的 trigger_clickable_id 很难在被动扫描中确定，暂时留空或填 None
+            su = SubmissionUnit(
+                id=self._next_submission_id,
+                page_url=url,
+                trigger_clickable_id=None,
+                related_input_ids=related_inputs,
+                api_call_ids=[api.id],
+                kind="auto_detected",
+            )
+            self._next_submission_id += 1
+            submissions.append(su)
 
         # 构建 PageAsset
         pa = PageAsset(

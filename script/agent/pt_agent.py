@@ -1,15 +1,15 @@
 # script/agent/pt_agent.py
 
-from script.scanner.web_attack_surface_scanner import WebAttackSurfaceScanner
-from script.scanner.attack_surface_view import build_llm_attack_surface_view
-from script.analysis.owasp_llm_analyzer import OwaspTop10LLMAnalyzer
-from script.payload.payload_registry import PayloadTemplateRegistry
-from script.executor import (
-    ExecutorRegistry,
-    XssAttackExecutor,
-    TestContext,
-    PlannedTest,
-)
+# from script.scanner.web_attack_surface_scanner import WebAttackSurfaceScanner
+# from script.scanner.attack_surface_view import build_llm_attack_surface_view
+# from script.analysis.owasp_llm_analyzer import OwaspTop10LLMAnalyzer
+# from script.payload.payload_registry import PayloadTemplateRegistry
+# from script.executor import (
+#     ExecutorRegistry,
+#     XssAttackExecutor,
+#     TestContext,
+#     PlannedTest,
+# )
 import os
 # from script.executor.test_executor import TestExecutor  # 以后再写
 
@@ -30,7 +30,7 @@ class PTAgent:
             headless=True,
             same_origin_only=True,
         )
-        self.llm_analyzer = OwaspTop10LLMAnalyzer(llm_client)
+        self.llm_analyzer = None # OwaspTop10LLMAnalyzer(llm_client)
         # self.executor = TestExecutor(...)
 
     def run(self):
