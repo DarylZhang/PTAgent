@@ -70,12 +70,13 @@ class PageAssetScanner:
             dom_snapshot = None
             body = page.query_selector("body")
             if body:
-                # 只截 body 的 HTML，避免太大
-                dom_html = body.inner_html()
-                # 可选：做个长度截断
-                if len(dom_html) > 20000:
-                    dom_html = dom_html[:20000] + "\n<!-- truncated -->"
-                dom_snapshot = dom_html
+                # # 只截 body 的 HTML，避免太大
+                # dom_html = body.inner_html()
+                # # 可选：做个长度截断
+                # if len(dom_html) > 20000:
+                #     dom_html = dom_html[:20000] + "\n<!-- truncated -->"
+                # dom_snapshot = dom_html
+                dom_snapshot = body
 
             # 收集脚本、输入框、可点击元素
             scripts = self._extract_scripts(page)

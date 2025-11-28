@@ -14,6 +14,7 @@ import os
 # from script.executor.test_executor import TestExecutor  # 以后再写
 
 from script.scanner.site_scanner import SiteScanner
+from script.scanner.dom_distiller import InteractionDomDistiller
 
 class PTAgent:
     def __init__(self, base_url: str, llm_client):
@@ -48,6 +49,13 @@ class PTAgent:
             print(f"  clickables: {len(page.clickables)}")
             print(f"  scripts: {len(page.scripts)}")
             print(f"  api_calls: {len(page.api_calls)}")
+
+            distiller = InteractionDomDistiller()
+            dsl = distiller.distill_html(page.html)
+
+            print("=== Distilled DSL ===")
+            print(dsl)
+
             print()
 
     # def run(self):
