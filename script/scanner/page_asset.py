@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field, asdict
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, Set, Union
 
 
 # ---------------------------------------------------------
@@ -95,8 +95,8 @@ class ScriptAsset:
     # 如果是 <script src="...">，这里是绝对或相对 URL
     src: Optional[str]
 
-    # 如果是内联 <script>，这里保存脚本内容（可以做截断，避免太大）
-    inline_code: Optional[str] = None
+    # 无论是内联的还是下载的外链，只要我们在 _collect_links 阶段拿到了内容，都存在这里。
+    content: Optional[str] = None
 
     # script type，例如 text/javascript, module 等
     script_type: Optional[str] = None
@@ -193,8 +193,11 @@ class PageAsset:
     # 页面 <title> 内容（可选）
     title: Optional[str] = None
 
-    # 原始 HTML 文本（可以只存前 N KB，避免太大）
+    # 原始 HTML 文本
     html: Optional[str] = None
+
+    # 清洗后的 HTML 文本
+    cleaned_html: Optional[str] = None
 
     # 或者存一个简化后的 body.outerHTML 片段
     dom_snapshot: Optional[str] = None
@@ -238,6 +241,7 @@ class PageAsset:
             "final_url": self.final_url,
             "title": self.title,
             "html": self.html,
+            "cleaned_html": self.cleaned_html,
             "dom_snapshot": self.dom_snapshot,
             "scripts": [asdict(s) for s in self.scripts],
             "inputs": [asdict(i) for i in self.inputs],
@@ -252,6 +256,24 @@ class PageAsset:
         }
 
 
+@dataclass  # <--- 必须加上这个装饰器
+class AuthCredentials:
+    """
+    登录成功后获取的凭证集合
+    """
+    # Playwright cookie format: [{'name': '...', 'value': '...', 'url': '...'}]
+    cookies: List[Dict[str, Any]] = field(default_factory=list)
+
+    # HTTP Headers: {"Authorization": "Bearer ..."}
+    headers: Dict[str, str] = field(default_factory=dict)
+
+    # LocalStorage: [{"key": "token", "value": "..."}]
+    local_storage: List[Dict[str, str]] = field(default_factory=list)
+
+    # SessionStorage
+    session_storage: List[Dict[str, str]] = field(default_factory=list)
+
+
 # ---------------------------------------------------------
 # SiteAsset：整个站点的页面资产集合（可选）
 # ---------------------------------------------------------
@@ -264,6 +286,16 @@ class SiteAsset:
     """
     base_url: str
     pages: Dict[str, PageAsset] = field(default_factory=dict)
+
+    # [新增]: 独立发现的 API 列表
+    # 来源：
+    # 1. 爬虫 Probe 阶段发现是 JSON 响应的 URL
+    # 2. 从 JS 字符串提取出的 API 路径 (JsLinkExtractor)
+    discovered_apis: List[ApiCall] = field(default_factory=list)
+
+    # [新增] 需要鉴权的页面队列
+    # 这里的 URL 在未登录扫描时被拦截了，需要在登录成功后进行 "Re-scan"
+    auth_required_urls: Set[str] = field(default_factory=set)
 
     meta: Dict[str, Any] = field(default_factory=dict)
 
