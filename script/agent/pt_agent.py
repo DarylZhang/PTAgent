@@ -9,6 +9,9 @@ import pickle
 import hashlib # 用于生成基于 URL 的唯一文件名
 from typing import Any # 用于类型提示
 
+from utils.browser_manager import BrowserManager
+
+
 class PTAgent:
     def __init__(self, base_url: str, llm_client):
         self.base_url = base_url
@@ -19,6 +22,7 @@ class PTAgent:
             same_origin_only=True,
         )
         self.llm_analyzer = OwaspTop10LLMAnalyzer(llm_client)
+        # self.browser = browser_manager
 
         # --- NEW: 实例化 ExploitationEngine ---
         # 1. 定义可用的攻击策略类（只包含 XSSAttacker）
@@ -45,7 +49,12 @@ class PTAgent:
         # =================================================
         # Step 0: 手动凭证注入 (Manual Credential Injection)
         # =================================================
-        creds = self._prompt_for_credentials()
+        creds = self._load_cache("auth_creds")
+
+        if not creds :
+            creds = self._prompt_for_credentials()
+            print("[*] Credentials loaded successfully!")
+            self._save_cache(creds, "auth_creds")
 
         if creds:
             print("[*] Applying credentials to SiteScanner...")
@@ -69,24 +78,6 @@ class PTAgent:
             print("\n[Phase 1] Skipped Scan. Loaded SiteAsset from cache.")
 
         self._print_scan_summary(site_asset, phase="Guest")
-
-        # =================================================
-        # Step 2: 授权视角重扫 (Authenticated Re-scan)
-        # =================================================
-        # 如果用户刚才输入了凭证，且第一阶段发现了需要权限的 URL
-        # %%%%%%%%%%%%%%%% to be open
-        # if creds and site_asset.auth_required_urls:
-        #     print(f"\n[Phase 2] Detected {len(site_asset.auth_required_urls)} protected targets.")
-        #     print(f"[*] Starting Authenticated Re-scan with provided credentials...")
-        #
-        #     # 调用扫描器的 scan_authenticated 方法
-        #     # 注意：这需要你在 SiteScanner 里实现了 scan_authenticated (之前的讨论中有代码)
-        #     self.scanner.scan_authenticated(creds)
-        #
-        #     self._print_scan_summary(site_asset, phase="Authenticated")
-        #
-        # elif not creds and site_asset.auth_required_urls:
-        #     print("\n[!] Protected URLs found, but no credentials provided. Skipping Phase 2.")
 
         print("\n=== Site scan finished ===")
         print(f"Base URL: {site_asset.base_url}")
@@ -171,7 +162,7 @@ class PTAgent:
         for issue in analysis_result.issues:
             # 聚焦于 XSS 漏洞的判断逻辑
             # (根据 ExploitationEngine 中 _ATTACK_MAPPING 的键进行判断)
-            is_xss_category = issue.owasp_category in ['XSS', 'A03: Injection']
+            is_xss_category = issue.owasp_category in ['XSS', 'A03: Cross-Site Scripting (XSS)']
 
             # 仅在 XSS 漏洞且置信度高或中时进行攻击
             if is_xss_category and issue.confidence in ["High", "Medium"]:

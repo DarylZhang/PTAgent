@@ -83,7 +83,7 @@ class AuthAgent(threading.Thread):
 
                 # TODO: 这里替换为你真实的 LLM 交互逻辑
                 # page.goto(url)
-                # llm_action = llm.plan(page_content)
+                # llm_action = utils.plan(page_content)
                 # ...
 
                 # 假设我们在这里成功获取了凭证

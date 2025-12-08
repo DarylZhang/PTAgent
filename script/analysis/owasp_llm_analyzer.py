@@ -6,14 +6,14 @@ import json
 import logging
 
 # 假设你的 LLM 客户端接口定义在这里
-from script.llm.base import LLMClient
+from utils.llm.base import LLMClient
 
 
 @dataclass
 class PotentialIssue:
     # 漏洞位置描述
     location: str  # e.g., "Page: /login -> Input: email"
-
+    url: str
     # OWASP 类别
     owasp_category: str  # e.g., "A03: Injection"
 
@@ -67,6 +67,8 @@ class OwaspTop10LLMAnalyzer:
         for page_data in interactive_pages:
             try:
                 page_issues = self._analyze_single_page(page_data)
+                for issue in page_issues:
+                    issue.location = page_data['url']
                 all_issues.extend(page_issues)
             except Exception as e:
                 self.logger.error(f"Error analyzing page {page_data.get('url')}: {e}")
@@ -117,36 +119,60 @@ class OwaspTop10LLMAnalyzer:
         context_json = json.dumps(page_data, indent=2, ensure_ascii=False)
 
         return f"""
-You are a Web Security Expert specializing in OWASP Top 10 vulnerabilities.
+        You are a Web Security Expert specializing in automated vulnerability detection.
 
-### TARGET CONTEXT (JSON)
-{context_json}
+        ### TARGET CONTEXT (JSON)
+        {context_json}
 
-### TASK
-Analyze the "structure_snapshot" (HTML), "inputs", and "observed_traffic" in the context above.
-Identify potential security risks focusing on:
-1. **Injection (SQLi/XSS)**: Look at inputs and URL parameters.
-2. **Broken Access Control**: Look at the logic and API calls.
-3. **Sensitive Data Exposure**: Look at comments or hidden fields.
+        ### TASK
+        Analyze the "structure_snapshot" (HTML), "inputs", and "observed_traffic".
+        Identify potential security risks. You MUST distinguish between different types of injection.
 
-### OUTPUT REQUIREMENT
-Return a STRICT JSON object with a list of "issues". No markdown formatting.
-Format:
-{{
-  "issues": [
-    {{
-      "location": "Descriptive location (e.g. Login Form -> Email Input)",
-      "owasp_category": "A03: Injection",
-      "risk_reason": "Explanation of why this is risky...",
-      "suggested_tests": ["Try payload ' OR 1=1 --", "Check for error messages"],
-      "related_input_id": 101 (Integer, MUST match the 'internal_id' in inputs list, or null),
-      "related_api_url": "/api/login" (String, or null),
-      "confidence": "High"
-    }}
-  ]
-}}
-If no obvious risks are found, return {{ "issues": [] }}.
-"""
+        Focus on these specific categories:
+        1. **SQL Injection (SQLi)**: Look for inputs that interact with databases (e.g., search, login, id parameters).
+        2. **Cross-Site Scripting (XSS)**: Look for inputs that might be reflected in the HTML DOM (e.g., search query reflected in results, profile names).
+        3. **Broken Access Control**: Look for IDOR or unauthorized API usage.
+        4. **Sensitive Data Exposure**: Look for leaked secrets in comments or traffic.
+
+        ### OUTPUT REQUIREMENT
+        Return a STRICT JSON object with a list of "issues". No markdown formatting.
+
+        **CRITICAL RULE for 'owasp_category':**
+        Do NOT use the generic "A03: Injection". You MUST use one of the specific sub-categories below:
+        - "A03: SQL Injection"
+        - "A03: Cross-Site Scripting (XSS)"
+        - "A03: Command Injection"
+        - "A01: Broken Access Control"
+        - "A07: Identification and Authentication Failures"
+        (Use other specific OWASP labels if necessary, but keep SQLi and XSS separate.)
+
+        Format Example:
+        {{
+          "issues": [
+            {{
+              "location": null,
+              "url": "copy the url value from observed_traffic.url attribute",
+              "owasp_category": "A03: Cross-Site Scripting (XSS)", 
+              "risk_reason": "The search query is reflected in the result page without obvious encoding...",
+              "suggested_tests": ["Try <script>alert(1)</script>", "Check for reflection"],
+              "related_input_id": 101,
+              "related_api_url": null,
+              "confidence": "High"
+            }},
+            {{
+              "location": "API: /api/user -> Param: id",
+              "url": "http://example.com/api/user?id=1",
+              "owasp_category": "A03: SQL Injection",
+              "risk_reason": "Numeric ID parameter likely used in SQL query...",
+              "suggested_tests": ["Add single quote '", "Try OR 1=1"],
+              "related_input_id": null,
+              "related_api_url": "/api/user",
+              "confidence": "Medium"
+            }}
+          ]
+        }}
+        If no obvious risks are found, return {{ "issues": [] }}.
+        """
 
     def _build_api_prompt(self, api_data: Dict[str, Any]) -> str:
         """
@@ -204,6 +230,7 @@ Return a STRICT JSON object.
             for item in data.get("issues", []):
                 issues.append(PotentialIssue(
                     location=item.get("location", "Unknown"),
+                    url=item.get("url", "Unknown"),
                     owasp_category=item.get("owasp_category", "Unknown"),
                     risk_reason=item.get("risk_reason", ""),
                     suggested_tests=item.get("suggested_tests", []),

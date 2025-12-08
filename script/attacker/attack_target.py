@@ -1,20 +1,22 @@
-from dataclasses import dataclass
-from typing import Union, Dict
-
-from scanner.page_asset import InputField, ApiCall
-
-# 攻击目标可以是 InputField 或 ApiCall
-AttackTarget = Union[InputField, ApiCall]
+from dataclasses import dataclass, field
+from typing import Dict
 
 
 @dataclass
 class AttackResult:
     """代表一次攻击尝试的结果。"""
 
-    success: bool  # 攻击是否成功
-    vulnerability_type: str  # 成功利用的漏洞类型 (e.g., 'XSS', 'SQLi')
-    severity: str  # 漏洞评级 (e.g., 'High', 'Medium')
-    proof_of_concept: str  # 成功的攻击载荷/PoC代码
-    request_snapshot: Dict  # 成功请求的详情 (Headers, Body等)
-    response_snapshot: str  # 成功利用后的响应内容快照
-    details: str = ""  # 攻击过程的详细日志或备注
+    success: bool  # 必填：结果必须有成败
+    vulnerability_type: str  # 必填：测的啥漏洞
+    proof_of_concept: str  # 必填：没成功就是空字符串
+
+    # --- 将以下字段改为带有默认值的可选字段 ---
+
+    severity: str = "N/A"  # 默认为 N/A
+
+    # 注意：对于 Dict 和 List，必须用 field(default_factory=...)
+    request_snapshot: Dict = field(default_factory=dict)
+
+    response_snapshot: str = ""
+
+    details: str = ""

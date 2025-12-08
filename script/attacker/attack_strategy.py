@@ -1,8 +1,10 @@
 from abc import ABC, abstractmethod
 from typing import Dict
 
-from attacker.attack_target import AttackTarget, AttackResult
-from llm.base import LLMClient
+from analysis.owasp_llm_analyzer import PotentialIssue
+from attacker.attack_target import AttackResult
+from utils.llm.base import LLMClient
+from scanner.page_asset import SiteAsset
 
 
 class AttackStrategy(ABC):
@@ -15,7 +17,7 @@ class AttackStrategy(ABC):
         self.llm = llm_client
 
     @abstractmethod
-    def exploit(self, target: AttackTarget, session_context: Dict) -> AttackResult:
+    def exploit(self,issue: PotentialIssue, site_asset: SiteAsset, session_context: Dict) -> AttackResult:
         """
         执行特定漏洞的攻击流程。
 

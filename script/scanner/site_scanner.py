@@ -7,8 +7,6 @@ from urllib.parse import urlparse, urljoin
 import json
 from .page_asset import SubmissionUnit
 from urllib.parse import parse_qs
-from playwright.sync_api import sync_playwright, Page, Request
-
 from scanner.utils.html_cleaner import clean_html_for_llm
 from .link_extractor import JsLinkExtractor
 from .page_asset import (
@@ -21,120 +19,9 @@ from .page_asset import (
     Cookie,
     StorageItem, AuthCredentials,
 )
-from .secret_hunter import SecretHunter
 from playwright.sync_api import sync_playwright, Page, Request, Browser, BrowserContext, Playwright # <-- 新增导入 Browser, BrowserContext, Playwright
 
-
-# class SiteScanner:
-#     """
-#     站点级扫描器：
-#       - 从 base_url 出发，递归地爬取页面（有限深度）
-#       - 对每个页面构建一个 PageAsset
-#       - 最终返回一个 SiteAsset（相当于新 AttackSurface）
-#
-#     注意：
-#       - 这里把「页面」理解为完整 URL，包括 hash（#/login）；
-#         也就是说 http://host/#/login 和 http://host/#/contact 会被视为两个 PageAsset。
-#     """
-#
-#     def __init__(
-#         self,
-#         base_url: str,
-#         max_depth: int = 2,
-#         headless: bool = True,
-#         same_origin_only: bool = True,
-#     ) -> None:
-#         self.base_url = base_url.rstrip("/")
-#         self.max_depth = max_depth
-#         self.headless = headless
-#         self.same_origin_only = same_origin_only
-#
-#         parsed = urlparse(self.base_url)
-#         self._base_origin = (parsed.scheme, parsed.netloc)
-#
-#         # 站点资产
-#         self._site_asset = SiteAsset(base_url=self.base_url)
-#
-#         # 已访问 URL 集合（包含 hash）
-#         self._visited: Set[str] = set()
-#
-#         # 各种 ID 计数器（全局递增，方便 LLM 关联）
-#         self._next_input_id = 1
-#         self._next_clickable_id = 1
-#         self._next_api_id = 1
-#         self._next_submission_id = 1  # 预留，将来用
-#
-#         # 当前页面加载期间捕获的 API
-#         self._captured_apis: List[ApiCall] = []
-#
-#         # [新增] 用于记录已扫描过的脚本 URL，避免重复下载和分析
-#         self._processed_script_urls: Set[str] = set()
-#
-#         self._auth_headers = {}
-#
-#         # --- 新增：Playwright 资源属性 ---
-#         self._playwright: Optional[Playwright] = None
-#         self._browser: Optional[Browser] = None
-#         self._context: Optional[BrowserContext] = None
-#         self._page: Optional[Page] = None  # <--- self._page 现在是实例属性
-#
-#         # 启动 Playwright 资源
-#         self._initialize_playwright()
-#
-#         # # 初始化并启动 AuthAgent 线程
-#         # self.auth_agent = AuthAgent(headless=headless)
-#         # self.auth_agent.start()
-#         #
-#         # # 用于存储被动发现的凭证 (SecretHunter)
-#         # self.passive_creds: Optional[AuthCredentials] = None
-#
-#     # ==============================
-#     # 对外入口：扫描整个站点
-#     # ==============================
-#     def scan(self) -> SiteAsset:
-#         try:
-#             with sync_playwright() as p:
-#                 browser = p.chromium.launch(headless=self.headless)
-#                 context = browser.new_context()
-#
-#                 # 在 context 层面收集 API 调用，并根据当前页面 URL 归属
-#                 self._api_calls_buffer: Dict[str, List[ApiCall]] = {}
-#
-#                 context.on("requestfinished", self._on_request_finished_wrapper)
-#
-#                 page = context.new_page()
-#
-#                 # 从 base_url 开始爬
-#                 self._crawl_page(page, self.base_url, depth=0)
-#
-#                 browser.close()
-#         finally:
-#             # 扫描主循环结束，不论成功失败
-#             # 通知 Agent 没新任务了 (虽然 Agent 是 daemon，但显式停止更好)
-#             pass
-#
-#         # # 扫描结束，进入“等待凭证”阶段
-#         # print("[-] Scan finished. Waiting for Auth Agent results...")
-#         #
-#         # # 优先检查被动发现的凭证
-#         # final_creds = self.passive_creds
-#         #
-#         # # 如果被动没找到，等待 AuthAgent 主动注册的结果 (最多等 60 秒)
-#         # if not final_creds:
-#         #     final_creds = self.auth_agent.get_credentials(timeout=60)
-#         #
-#         # self.auth_agent.stop()  # 停止线程
-#
-#         # 如果拿到了凭证，立即启动受保护扫描
-#         # if final_creds:
-#         #     print(f"[+] Credentials obtained! Starting Authenticated Re-scan.")
-#         #     self.scan_authenticated(final_creds)
-#         # else:
-#         #     print("[-] No credentials found. Skipping authenticated scan.")
-#
-#         return self._site_asset
 class SiteScanner:
-    # ... (Docstring 保持不变)
 
     def __init__(
             self,
@@ -380,54 +267,15 @@ class SiteScanner:
             # 复用 _should_visit 的逻辑来检查最终 URL
             if not self._should_visit(final_url):
                 print(f"[WARN] Redirected to off-origin: {final_url}. Stopping analysis.")
-
-                # 这里的处理很有讲究：
-                # 1. 这是一个“开放重定向 (Open Redirect)”漏洞的强力证据！
-                # 2. 我们应该停止提取 GitHub 的 DOM，但也许应该记录下这个跳转行为
-
-                # 可以在 meta 里记录一下，然后直接返回
-                # 也可以专门定义一个 "RedirectAsset"
-
-                # 这里为了防止污染 SiteAsset，直接 return，不提取任何 Github 的内容
                 return
 
         current_url = page.url  # 可能存在重定向
         title = page.title()
         html = page.content()
 
-        # ============================================
-        # [新增 1] 被动凭证扫描 (Secret Hunter)
-        # ============================================
-        # secrets = SecretHunter.scan_content(url, html)
-        # if secrets:
-        #     # 如果发现了像 token 的东西，尝试构造 AuthCredentials
-        #     # 这里简单处理，假设发现了 Bearer Token
-        #     if "api_key" in secrets:
-        #         self.passive_creds = AuthCredentials(headers={"Authorization": f"Bearer {secrets['api_key']}"})
-
-        # ============================================
-        # [新增 2] 主动 Agent 投喂 (Dispatcher)
-        # ============================================
-        # 只有在还没拿到凭证的时候才投喂
-        # if not self.passive_creds and not self.auth_agent.credentials:
-        #     lower_url = url.lower()
-        #
-        #     # 简单的关键词判断，你可以用 AssetTriager 里的逻辑
-        #     if self._is_register_page(lower_url, html):
-        #         print(f"[*] Dispatching REGISTER task to AuthAgent: {url}")
-        #         self.auth_agent.add_task(url, 'register')
-        #
-        #     elif self._is_login_page(lower_url, html):
-        #         print(f"[*] Dispatching LOGIN task to AuthAgent: {url}")
-        #         self.auth_agent.add_task(url, 'login')
-
         dom_snapshot = None
         body = page.query_selector("body")
         if body:
-        #     dom_html = body.inner_html()
-        #     # if len(dom_html) > 20000:
-        #     #     dom_html = dom_html[:20000] + "\n<!-- truncated -->"
-        #     dom_snapshot = dom_html
             dom_snapshot = body.inner_html()
 
         cleaned_html = clean_html_for_llm(html)
@@ -1040,9 +888,6 @@ class SiteScanner:
 
         return clickables
 
-    # ==============================
-    # 辅助：构造简单 CSS selector
-    # ==============================
     # ==============================
     # 辅助：构造简单 CSS selector
     # ==============================

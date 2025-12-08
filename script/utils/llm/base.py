@@ -1,4 +1,4 @@
-# script/llm/base.py
+# script/utils/base.py
 from __future__ import annotations
 
 from typing import Protocol
