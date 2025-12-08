@@ -5,12 +5,12 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Optional, List
 
-from script.scanner.web_attack_surface_scanner import (
-    AttackSurface,
-    InputField,
-    ApiCall,
-)
-from script.analysis.owasp_llm_analyzer import PotentialIssue
+# from script.scanner.web_attack_surface_scanner import (
+#     AttackSurface,
+#     InputField,
+#     ApiCall,
+# )
+# from script.analysis.owasp_llm_analyzer import PotentialIssue
 
 
 @dataclass

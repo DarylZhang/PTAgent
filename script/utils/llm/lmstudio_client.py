@@ -1,4 +1,4 @@
-# script/llm/lmstudio_client.py
+# script/utils/lmstudio_client.py
 from __future__ import annotations
 
 from typing import Optional, List
@@ -9,7 +9,7 @@ from openai import OpenAI
 
 class LMStudioClient:
     """
-    通用本地大模型客户端（兼容 LMStudio / LocalAI / Ollama OpenAI API）
+    通用本地大模型客户端（LMStudio）
     实现 LLMClient 接口：complete(prompt: str) -> str
     """
 

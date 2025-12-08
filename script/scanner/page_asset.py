@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field, asdict
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, Set, Union
 
 
 # ---------------------------------------------------------
@@ -31,6 +31,33 @@ class InputField:
     # 以后可以扩展：是否可见、是否 disabled、是否 required 等
     meta: Dict[str, Any] = field(default_factory=dict)
 
+    # 输入源类型: "dom" (默认), "url_param", "header", "cookie" 等
+    source: str = "dom"
+
+
+@dataclass
+class Cookie:
+    """
+    表示一个 Cookie 条目。
+    """
+    name: str
+    value: str
+    domain: str
+    path: str
+    expires: float
+    httpOnly: bool
+    secure: bool
+    sameSite: str
+
+
+@dataclass
+class StorageItem:
+    """
+    表示 LocalStorage 或 SessionStorage 的一个键值对。
+    """
+    key: str
+    value: str
+
 
 @dataclass
 class ApiCall:
@@ -45,7 +72,14 @@ class ApiCall:
     # 触发该请求的页面（有时重定向后最终 URL 会不同）
     page_url: Optional[str] = None
 
-    # 以后可以扩展：响应状态码 / 响应体摘要 / headers / cookies 等
+    request_headers: Dict[str, str] = field(default_factory=dict)
+    request_cookies: List[Dict[str, Any]] = field(default_factory=list)
+    
+    response_status: Optional[int] = None
+    response_headers: Dict[str, str] = field(default_factory=dict)
+    response_body: Optional[str] = None  # 文本形式的响应体（如有）
+
+    # 以后可以扩展：响应体摘要 / 更多元信息
     meta: Dict[str, Any] = field(default_factory=dict)
 
 
@@ -61,8 +95,8 @@ class ScriptAsset:
     # 如果是 <script src="...">，这里是绝对或相对 URL
     src: Optional[str]
 
-    # 如果是内联 <script>，这里保存脚本内容（可以做截断，避免太大）
-    inline_code: Optional[str] = None
+    # 无论是内联的还是下载的外链，只要我们在 _collect_links 阶段拿到了内容，都存在这里。
+    content: Optional[str] = None
 
     # script type，例如 text/javascript, module 等
     script_type: Optional[str] = None
@@ -120,6 +154,10 @@ class SubmissionUnit:
     # 参与这次提交的 input 字段（InputField.internal_id 列表）
     related_input_ids: List[int] = field(default_factory=list)
 
+    # 核心映射：API 参数名 -> InputField.internal_id
+    # 例如: {"username": 101, "password": 102}
+    input_map: Dict[str, int] = field(default_factory=dict)
+
     # 提交对应的后端 API（ApiCall.id），目前假定主要是一个主 API
     api_call_ids: List[int] = field(default_factory=list)
 
@@ -155,8 +193,11 @@ class PageAsset:
     # 页面 <title> 内容（可选）
     title: Optional[str] = None
 
-    # 原始 HTML 文本（可以只存前 N KB，避免太大）
+    # 原始 HTML 文本
     html: Optional[str] = None
+
+    # 清洗后的 HTML 文本
+    cleaned_html: Optional[str] = None
 
     # 或者存一个简化后的 body.outerHTML 片段
     dom_snapshot: Optional[str] = None
@@ -164,7 +205,7 @@ class PageAsset:
     # 关联的 JS 脚本资产（外链 + 内联）
     scripts: List[ScriptAsset] = field(default_factory=list)
 
-    # 页面上的输入控件
+    # 页面上的输入控件（包括 DOM input, URL 参数, Hidden fields 等）
     inputs: List[InputField] = field(default_factory=list)
 
     # 页面上的可点击元素（按钮 / 链接等）
@@ -176,7 +217,19 @@ class PageAsset:
     # 从页面行为推导出的“提交单元”
     submissions: List[SubmissionUnit] = field(default_factory=list)
 
-    # 预留字段：其他任何页面级元信息（安全头、cookies、框架指纹等）
+    # --- 新增：OWASP Top 10 所需的扩展信息 ---
+
+    # Cookies (name, value, attributes)
+    cookies: List[Cookie] = field(default_factory=list)
+
+    # LocalStorage / SessionStorage
+    local_storage: List[StorageItem] = field(default_factory=list)
+    session_storage: List[StorageItem] = field(default_factory=list)
+
+    # HTML 注释 (可能泄露敏感信息)
+    comments: List[str] = field(default_factory=list)
+
+    # 预留字段：其他任何页面级元信息（安全头、框架指纹等）
     meta: Dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> Dict[str, Any]:
@@ -188,14 +241,37 @@ class PageAsset:
             "final_url": self.final_url,
             "title": self.title,
             "html": self.html,
+            "cleaned_html": self.cleaned_html,
             "dom_snapshot": self.dom_snapshot,
             "scripts": [asdict(s) for s in self.scripts],
             "inputs": [asdict(i) for i in self.inputs],
             "clickables": [asdict(c) for c in self.clickables],
             "api_calls": [asdict(a) for a in self.api_calls],
             "submissions": [asdict(s) for s in self.submissions],
+            "cookies": [asdict(c) for c in self.cookies],
+            "local_storage": [asdict(item) for item in self.local_storage],
+            "session_storage": [asdict(item) for item in self.session_storage],
+            "comments": self.comments,
             "meta": self.meta,
         }
+
+
+@dataclass  # <--- 必须加上这个装饰器
+class AuthCredentials:
+    """
+    登录成功后获取的凭证集合
+    """
+    # Playwright cookie format: [{'name': '...', 'value': '...', 'url': '...'}]
+    cookies: List[Dict[str, Any]] = field(default_factory=list)
+
+    # HTTP Headers: {"Authorization": "Bearer ..."}
+    headers: Dict[str, str] = field(default_factory=dict)
+
+    # LocalStorage: [{"key": "token", "value": "..."}]
+    local_storage: List[Dict[str, str]] = field(default_factory=list)
+
+    # SessionStorage
+    session_storage: List[Dict[str, str]] = field(default_factory=list)
 
 
 # ---------------------------------------------------------
@@ -210,6 +286,16 @@ class SiteAsset:
     """
     base_url: str
     pages: Dict[str, PageAsset] = field(default_factory=dict)
+
+    # [新增]: 独立发现的 API 列表
+    # 来源：
+    # 1. 爬虫 Probe 阶段发现是 JSON 响应的 URL
+    # 2. 从 JS 字符串提取出的 API 路径 (JsLinkExtractor)
+    discovered_apis: List[ApiCall] = field(default_factory=list)
+
+    # [新增] 需要鉴权的页面队列
+    # 这里的 URL 在未登录扫描时被拦截了，需要在登录成功后进行 "Re-scan"
+    auth_required_urls: Set[str] = field(default_factory=set)
 
     meta: Dict[str, Any] = field(default_factory=dict)
 

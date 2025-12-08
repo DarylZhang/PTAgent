@@ -1,5 +1,7 @@
 # macOS
 .DS_Store
+*.pkl
+.env
 
 # IDE
 .idea/

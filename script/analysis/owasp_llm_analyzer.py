@@ -1,134 +1,248 @@
 # script/analysis/owasp_llm_analyzer.py
 
 from dataclasses import dataclass, asdict
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 import json
+import logging
 
-from script.scanner.attack_surface_view import LlmAttackSurfaceView
-from script.llm.base import LLMClient
+# 假设你的 LLM 客户端接口定义在这里
+from utils.llm.base import LLMClient
+
 
 @dataclass
 class PotentialIssue:
-    location: str          # 如 "page:/#/login input#email" 或 "api:GET /rest/products/search"
-    owasp_category: str    # 如 "A03: Injection"
-    risk_reason: str       # LLM 解释为什么这里有风险
-    suggested_tests: List[str]  # 高层次测试思路（不是具体 payload）
-    related_input_id: int | None = None
-    related_endpoint_id: int | None = None
+    # 漏洞位置描述
+    location: str  # e.g., "Page: /login -> Input: email"
+    url: str
+    # OWASP 类别
+    owasp_category: str  # e.g., "A03: Injection"
+
+    # 风险分析
+    risk_reason: str  # e.g., "Input allows special characters and reflects in DOM..."
+
+    # 抽象测试思路 (给后续 Payload Generator 用的)
+    suggested_tests: List[str]
+
+    # 关键：用于机器关联的 ID
+    # 如果是页面上的输入框漏洞，填这个
+    related_input_id: Optional[int] = None
+    # 如果是 API 漏洞（如 IDOR），填这个 (虽然独立 API 没有 ID，但页面 API 有)
+    related_api_url: Optional[str] = None
+
+    # 漏洞置信度 (LLM 评估)
+    confidence: str = "Medium"  # High, Medium, Low
 
 
 @dataclass
 class OwaspAnalysisResult:
+    # 所有的潜在漏洞列表
     issues: List[PotentialIssue]
 
     def to_dict(self) -> Dict[str, Any]:
         return {"issues": [asdict(i) for i in self.issues]}
 
+
 class OwaspTop10LLMAnalyzer:
     """
-    使用 LLM 对攻击面做‘思考’：
-    - 标记哪些输入点 / API 更可疑
-    - 映射到 OWASP Top 10 分类
-    - 产出高层次测试思路
+    LLM 分析器：
+    接收 AssetTriager 的分诊结果，
+    对 'interactive' 页面和 'standalone_apis' 进行逐个深度分析。
     """
 
-    def __init__(self, llm_client: LLMClient) -> None:
+    def __init__(self, llm_client: LLMClient):
         self.llm_client = llm_client
+        self.logger = logging.getLogger("LLM_Analyzer")
 
-    def analyze(self, view: LlmAttackSurfaceView) -> OwaspAnalysisResult:
-        surface_dict = view.to_dict()
-        prompt = self._build_prompt(surface_dict)
+    def analyze(self, triaged_data: Dict[str, List[Dict[str, Any]]]) -> OwaspAnalysisResult:
+        """
+        主入口。
+        triaged_data: AssetTriager.triage() 的返回值
+        """
+        all_issues: List[PotentialIssue] = []
 
-        raw = self.llm_client.complete(prompt)  # 这里是你接第三方 LLM 的位置
-        data = json.loads(raw)                 # 假设 LLM 按我们要求返回 JSON
+        # 1. 分析交互型页面 (Interactive Pages) - 重中之重
+        interactive_pages = triaged_data.get("interactive", [])
+        print(f"[*] Analyzing {len(interactive_pages)} interactive pages with LLM...")
 
-        issues: List[PotentialIssue] = []
-        for item in data.get("issues", []):
-            issues.append(
-                PotentialIssue(
-                    location=item["location"],
-                    owasp_category=item["owasp_category"],
-                    risk_reason=item["risk_reason"],
-                    suggested_tests=item.get("suggested_tests", []),
-                    related_input_id=item.get("related_input_id"),
-                    related_endpoint_id=item.get("related_endpoint_id")
-                )
-            )
+        for page_data in interactive_pages:
+            try:
+                page_issues = self._analyze_single_page(page_data)
+                for issue in page_issues:
+                    issue.location = page_data['url']
+                all_issues.extend(page_issues)
+            except Exception as e:
+                self.logger.error(f"Error analyzing page {page_data.get('url')}: {e}")
 
-        return OwaspAnalysisResult(issues=issues)
+        # 2. 分析独立 API (Standalone APIs)
+        standalone_apis = triaged_data.get("standalone_apis", [])
+        if standalone_apis:
+            print(f"[*] Analyzing {len(standalone_apis)} standalone APIs with LLM...")
+            # 为了节省 Token，API 可以尝试 5 个一组批量分析，或者逐个分析
+            # 这里演示逐个分析，准确率最高
+            for api_data in standalone_apis:
+                try:
+                    api_issues = self._analyze_single_api(api_data)
+                    all_issues.extend(api_issues)
+                except Exception as e:
+                    self.logger.error(f"Error analyzing API {api_data.get('url')}: {e}")
 
-    def _build_prompt(self, surface_dict: Dict[str, Any]) -> str:
-        surface_json = json.dumps(surface_dict, ensure_ascii=False, indent=2)
+        # 3. (可选) 分析线索页面 (Clues) - 通常用于提取信息，而非直接找漏洞
+        # 这里暂时跳过，或者可以写一个专门的 InfoExtractor
 
-        system_part = (
-            "你是一名 Web 安全分析助手，你的任务不是直接发起攻击，"
-            "而是根据给定的 Web 攻击面（页面、输入点、API 端点），"
-            "标记出可能存在安全风险的‘位置’，按 OWASP Top 10 分类，并给出测试思路。\n"
-            "请只输出 JSON，不要输出其它文字。\n"
-        )
+        return OwaspAnalysisResult(issues=all_issues)
 
-        user_part = f"""
-下面是某个 Web 应用自动扫描得到的攻击面信息（JSON）：
+    def _analyze_single_page(self, page_data: Dict[str, Any]) -> List[PotentialIssue]:
+        """
+        针对单个页面构建 Prompt 并请求 LLM
+        """
+        prompt = self._build_page_prompt(page_data)
 
-注意：
-- 每个输入点 inputs[i] 都有一个唯一的整数 id 字段。
-- 每个 API 端点 endpoints[j] 也有一个唯一的整数 id 字段。
-在输出 issues 时：
-- 如果你针对的是某个页面输入点，请在 related_input_id 中填写对应的 id，related_endpoint_id 填 null。
-- 如果你针对的是某个 API 端点，请在 related_endpoint_id 中填写对应的 id，related_input_id 填 null。
-- 如果同时关联输入和接口，可以两个都填，但一般推荐只填一个最核心的。
+        # 调用 LLM
+        raw_response = self.llm_client.complete(prompt)
 
-{surface_json}
+        # 解析结果
+        return self._parse_llm_json(raw_response)
 
-请你完成以下任务：
+    def _analyze_single_api(self, api_data: Dict[str, Any]) -> List[PotentialIssue]:
+        """
+        针对单个 API 构建 Prompt 并请求 LLM
+        """
+        prompt = self._build_api_prompt(api_data)
+        raw_response = self.llm_client.complete(prompt)
+        return self._parse_llm_json(raw_response)
 
-1. 找出你认为安全风险较大的页面输入点和 API endpoint。
-2. 对每个点：
-   - 填写 location 字符串：
-       * 页面输入点格式： "page:<页面路径> <css_selector>"  例如 "page:/#/login input#email"
-       * API 格式：       "api:<METHOD> <PATH>"              例如 "api:GET /rest/products/search"
-   - 填写一个最相关的 OWASP Top 10 类别，例如：
-       * "A01: Broken Access Control"
-       * "A02: Cryptographic Failures"
-       * "A03: Injection"
-       * "A04: Insecure Design"
-       * "A05: Security Misconfiguration"
-       * "A06: Vulnerable and Outdated Components"
-       * "A07: Identification and Authentication Failures"
-       * "A08: Software and Data Integrity Failures"
-       * "A09: Security Logging and Monitoring Failures"
-       * "A10: Server-Side Request Forgery (SSRF)"
-   - 填写 risk_reason：简要说明为什么你认为这里有风险（从是否可控输入、是否涉及敏感操作、是否可能注入等角度）。
-   - 填写 1~3 条 suggested_tests，每一条是一个“高层次的测试思路”，
-     比如“在该输入中尝试加入包含脚本标签的字符串，观察页面是否反射输出”，
-     不要写出具体 payload 内容。
+    def _build_page_prompt(self, page_data: Dict[str, Any]) -> str:
+        """
+        构建页面分析 Prompt
+        """
+        # 将字典转为 JSON 字符串，作为 Context
+        context_json = json.dumps(page_data, indent=2, ensure_ascii=False)
 
-请严格按照下面 JSON 模板输出：
+        return f"""
+        You are a Web Security Expert specializing in automated vulnerability detection.
 
+        ### TARGET CONTEXT (JSON)
+        {context_json}
+
+        ### TASK
+        Analyze the "structure_snapshot" (HTML), "inputs", and "observed_traffic".
+        Identify potential security risks. You MUST distinguish between different types of injection.
+
+        Focus on these specific categories:
+        1. **SQL Injection (SQLi)**: Look for inputs that interact with databases (e.g., search, login, id parameters).
+        2. **Cross-Site Scripting (XSS)**: Look for inputs that might be reflected in the HTML DOM (e.g., search query reflected in results, profile names).
+        3. **Broken Access Control**: Look for IDOR or unauthorized API usage.
+        4. **Sensitive Data Exposure**: Look for leaked secrets in comments or traffic.
+
+        ### OUTPUT REQUIREMENT
+        Return a STRICT JSON object with a list of "issues". No markdown formatting.
+
+        **CRITICAL RULE for 'owasp_category':**
+        Do NOT use the generic "A03: Injection". You MUST use one of the specific sub-categories below:
+        - "A03: SQL Injection"
+        - "A03: Cross-Site Scripting (XSS)"
+        - "A03: Command Injection"
+        - "A01: Broken Access Control"
+        - "A07: Identification and Authentication Failures"
+        (Use other specific OWASP labels if necessary, but keep SQLi and XSS separate.)
+
+        Format Example:
+        {{
+          "issues": [
+            {{
+              "location": null,
+              "url": "copy the url value from observed_traffic.url attribute",
+              "owasp_category": "A03: Cross-Site Scripting (XSS)", 
+              "risk_reason": "The search query is reflected in the result page without obvious encoding...",
+              "suggested_tests": ["Try <script>alert(1)</script>", "Check for reflection"],
+              "related_input_id": 101,
+              "related_api_url": null,
+              "confidence": "High"
+            }},
+            {{
+              "location": "API: /api/user -> Param: id",
+              "url": "http://example.com/api/user?id=1",
+              "owasp_category": "A03: SQL Injection",
+              "risk_reason": "Numeric ID parameter likely used in SQL query...",
+              "suggested_tests": ["Add single quote '", "Try OR 1=1"],
+              "related_input_id": null,
+              "related_api_url": "/api/user",
+              "confidence": "Medium"
+            }}
+          ]
+        }}
+        If no obvious risks are found, return {{ "issues": [] }}.
+        """
+
+    def _build_api_prompt(self, api_data: Dict[str, Any]) -> str:
+        """
+        构建 API 分析 Prompt
+        """
+        context_json = json.dumps(api_data, indent=2, ensure_ascii=False)
+
+        return f"""
+You are a Web Security Expert. Analyze this discovered API endpoint.
+
+### API CONTEXT (JSON)
+{context_json}
+
+### TASK
+This is a standalone API endpoint discovered via JavaScript or fuzzing.
+Determine how to abuse this endpoint.
+Focus on:
+1. **Method Tampering**: Can GET be POST?
+2. **Missing Auth**: Is it an IDOR or Admin endpoint?
+3. **Input Fuzzing**: What parameters does it likely accept?
+
+### OUTPUT REQUIREMENT
+Return a STRICT JSON object.
 {{
   "issues": [
     {{
-      "location": "page:/#/login input#email",
-      "owasp_category": "A07: Identification and Authentication Failures",
-      "risk_reason": "例如：该输入用于认证流程，可能存在弱认证或暴力破解风险（这里只是示例）",
-      "suggested_tests": [
-        "例如：尝试使用常见弱密码组合，观察登录错误提示信息是否暴露过多细节",
-        "例如：尝试多次错误登录，观察是否存在账户锁定机制"
-      ],
-      "related_input_id": 0,
-      "related_endpoint_id": null
-    }},
-    {{
-      "location": "api:GET /rest/products/search",
-      "owasp_category": "A03: Injection",
-      "risk_reason": "例如：搜索接口接受用户可控的查询参数，可能存在注入风险（这里只是示例）",
-      "suggested_tests": [
-        "例如：在搜索参数中加入特殊字符，观察返回结果或错误信息是否异常"
-      ],
+      "location": "API: {api_data.get('url')}",
+      "owasp_category": "A01: Broken Access Control",
+      "risk_reason": "Endpoint seems to be administrative...",
+      "suggested_tests": ["Try accessing without cookies", "Change GET to POST"],
       "related_input_id": null,
-      "related_endpoint_id": 3
+      "related_api_url": "{api_data.get('url')}",
+      "confidence": "Medium"
     }}
   ]
 }}
 """
-        return system_part + "\n\n" + user_part
+
+    def _parse_llm_json(self, raw_text: str) -> List[PotentialIssue]:
+        """
+        鲁棒的 JSON 解析器
+        """
+        try:
+            # 有时候 LLM 会返回 ```json ... ```，需要清洗
+            clean_text = raw_text.strip()
+            if clean_text.startswith("```"):
+                clean_text = clean_text.split("\n", 1)[1]
+                clean_text = clean_text.rsplit("\n", 1)[0]
+                if clean_text.startswith("json"):
+                    clean_text = clean_text[4:].strip()
+
+            data = json.loads(clean_text)
+
+            issues = []
+            for item in data.get("issues", []):
+                issues.append(PotentialIssue(
+                    location=item.get("location", "Unknown"),
+                    url=item.get("url", "Unknown"),
+                    owasp_category=item.get("owasp_category", "Unknown"),
+                    risk_reason=item.get("risk_reason", ""),
+                    suggested_tests=item.get("suggested_tests", []),
+                    related_input_id=item.get("related_input_id"),
+                    related_api_url=item.get("related_api_url"),
+                    confidence=item.get("confidence", "Medium")
+                ))
+            return issues
+
+        except json.JSONDecodeError:
+            self.logger.warning(f"Failed to parse LLM response as JSON: {raw_text[:100]}...")
+            return []
+        except Exception as e:
+            self.logger.error(f"Error parsing issues: {e}")
+            return []
