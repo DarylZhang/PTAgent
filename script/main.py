@@ -14,11 +14,13 @@ def main():
 
     # 2. 从环境变量获取配置 (如果 .env 里没写，就使用后面的默认值)
     target_url = os.getenv("TARGET_URL", "http://localhost:3000")
+    backend = os.getenv("LOCAL_BACKEND_TYPE")
+    model = os.getenv("LOCAL_MODEL_NAME")
 
     # 3. 初始化 LLM 客户端
     # 这里不需要传参，因为它会自动去读取 .env 中的 LOCAL_BACKEND_TYPE 和 LOCAL_MODEL_NAME
     print("[*] Initializing Local LLM Client...")
-    llm_client = LocalLLMClient()
+    llm_client = LocalLLMClient(backend, model)
 
     # 4. 初始化并运行渗透测试 Agent
     print(f"[*] Starting PTAgent targeting: {target_url}")
