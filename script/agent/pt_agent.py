@@ -131,12 +131,12 @@ class PTAgent:
         else:
             print("\n[Phase 4] Skipped Analysis. Loaded AnalysisResult from cache.")
 
-            # print(f"\n=== LLM Analysis Report ===")
-            # for issue in analysis_result.issues:
-            #     print(f"[{issue.owasp_category}] {issue.location}")
-            #     print(f"  Risk: {issue.risk_reason}")
-            #     print(f"  Tests: {issue.suggested_tests}")
-            #     print("-" * 30)
+        print(f"\n=== LLM Analysis Report ===")
+        for issue in analysis_result.issues:
+            print(f"[{issue.owasp_category}] {issue.location}")
+            print(f"  Risk: {issue.risk_reason}")
+            print(f"  Tests: {issue.suggested_tests}")
+            print("-" * 30)
 
         # =================================================
         # Step 5. 攻击执行 (Exploitation)
