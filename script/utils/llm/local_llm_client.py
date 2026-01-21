@@ -20,7 +20,7 @@ class LocalLLMClient:
 
     def __init__(
         self,
-        backend: Literal["lmstudio", "ollama"] = "lmstudio",  # 指定后端类型
+        backend: Literal["lmstudio", "ollama"] = "ollama",  # 指定后端类型
         model: str = "llama3",  # 模型名称
         base_url: Optional[str] = None,  # 可选：如果端口改了，可以手动覆盖
         temperature: float = 0.1,  # 渗透测试通常需要低温以保证确定性
