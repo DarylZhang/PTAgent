@@ -163,9 +163,34 @@ class PTAgent:
             # 聚焦于 XSS 漏洞的判断逻辑
             # (根据 ExploitationEngine 中 _ATTACK_MAPPING 的键进行判断)
             is_xss_category = issue.owasp_category in ['XSS', 'A03: Cross-Site Scripting (XSS)']
+            is_sqlInjection_category = issue.owasp_category in ['A03: SQL Injection']
+
 
             # 仅在 XSS 漏洞且置信度高或中时进行攻击
             if is_xss_category and issue.confidence in ["High", "Medium"]:
+                print("-" * 50)
+                print(f"[*] Targeting XSS at {issue.location} (Confidence: {issue.confidence})")
+
+                # 调用 ExploitationEngine，它会负责：
+                # 1. 映射 AttackTarget (InputField)
+                # 2. 路由到 XSSAttacker
+                # 3. 执行攻击，并使用 session_context 发送请求
+                attack_result = self.exploitation_engine.run_attack_from_issue(
+                    issue=issue,
+                    site_asset=site_asset,
+                    session_context=session_context  # 传入活动的会话上下文
+                )
+
+                all_attack_results.append(attack_result)
+
+                if attack_result.success:
+                    print(f"[!!! XSS FOUND !!!] PoC: {attack_result.proof_of_concept[:50]}...")
+                    print(f"  Details: {attack_result.details}")
+                else:
+                    print(f"[-] XSS attack failed. Details: {attack_result.details}")
+
+            # 仅在 SQL injection 漏洞且置信度高或中时进行攻击
+            if is_sqlInjection_category and issue.confidence in ["High", "Medium"]:
                 print("-" * 50)
                 print(f"[*] Targeting XSS at {issue.location} (Confidence: {issue.confidence})")
 
